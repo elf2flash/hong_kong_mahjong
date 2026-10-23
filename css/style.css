@@ -293,6 +293,15 @@ body {
   justify-self: center;
 }
 
+.center-main {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.75rem;
+  width: max-content;
+  max-width: 100%;
+}
+
 .discard-field-center {
   box-sizing: border-box;
 }
@@ -458,6 +467,23 @@ body {
 }
 
 /* Подсветка победителя */
+.hand-field.turn-glow,
+.meld-field.turn-glow {
+  background: rgba(180, 255, 160, 0.72);
+  border-color: #9dff7a;
+  box-shadow:
+    0 0 0 2px rgba(144, 238, 144, 0.95),
+    0 0 22px rgba(144, 255, 140, 0.75),
+    inset 0 0 24px rgba(210, 255, 190, 0.45);
+  transition: background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.hand-field.turn-glow .hand-field-label,
+.meld-field.turn-glow .hand-field-label {
+  color: #0d3d12;
+  background: rgba(200, 255, 180, 0.95);
+}
+
 .hand-field.winner-field,
 .meld-field.winner-field {
   border-color: #c44dff;
@@ -477,14 +503,24 @@ body {
   color: #e0b0ff;
 }
 
-/* Боковые боты — компактные вертикальные блоки */
+/* Боковые боты (Север / Юг) — поле «Рука» сразу 4×4 обычных плитки */
 .seat-left .hand-field,
 .seat-right .hand-field {
-  width: fit-content;
-  max-width: 220px;
+  --hand-cols: 4;
+  --hand-rows: 4;
+  --hand-gap: 4px;
+  width: calc(
+    var(--hand-cols) * var(--tile-w) + (var(--hand-cols) - 1) * var(--hand-gap) + 1.1rem
+  );
+  height: calc(
+    var(--hand-rows) * var(--tile-h) + (var(--hand-rows) - 1) * var(--hand-gap) + 1.4rem
+  );
+  max-width: none;
+  min-width: 0;
+  min-height: 0;
   margin: 0.35rem auto;
   padding: 0.85rem 0.55rem 0.55rem;
-  min-height: 0;
+  box-sizing: border-box;
 }
 
 .seat-left .meld-field,
@@ -521,7 +557,27 @@ body {
 
 .seat-left .hand-field .hand,
 .seat-right .hand-field .hand {
-  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: var(--hand-gap);
+  width: calc(var(--hand-cols) * var(--tile-w) + (var(--hand-cols) - 1) * var(--hand-gap));
+  height: calc(var(--hand-rows) * var(--tile-h) + (var(--hand-rows) - 1) * var(--hand-gap));
+  max-width: none;
+  max-height: none;
+  overflow: hidden;
+}
+
+.seat-left .hand-field .tile,
+.seat-left .hand-field .tile-back,
+.seat-right .hand-field .tile,
+.seat-right .hand-field .tile-back {
+  width: var(--tile-w);
+  height: var(--tile-h);
+  flex: 0 0 auto;
 }
 
 .seat-top .seat-row .hand-field,
@@ -653,16 +709,18 @@ body.dragging-tile .discard-field-center {
   height: var(--tile-back-h);
 }
 
+/* Рубашки боковых ботов — обычный размер, сетка 4×4 (см. .hand-field .hand выше) */
 .seat-left .back-hand,
 .seat-right .back-hand {
-  flex-direction: column;
-  max-height: calc(220px * var(--tile-scale));
+  flex-direction: row;
+  flex-wrap: wrap;
+  max-height: none;
 }
 
 .seat-left .back-hand .tile-back,
 .seat-right .back-hand .tile-back {
-  width: var(--tile-side-w);
-  height: var(--tile-side-h);
+  width: var(--tile-w);
+  height: var(--tile-h);
 }
 
 /* Tile — classic cream face, soft 3D edge, corner index */
@@ -825,12 +883,17 @@ body.dragging-tile .discard-field-center {
 }
 
 .result-panel {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 220px;
+  max-width: min(220px, 36vw);
   text-align: center;
   padding: 0.75rem 1rem;
   border-radius: 10px;
   background: rgba(20, 14, 8, 0.85);
   border: 1px solid var(--gold);
-  max-width: 280px;
+  box-sizing: border-box;
+  overflow: auto;
   animation: fade-up 0.4s ease;
 }
 
@@ -1116,9 +1179,15 @@ body.dragging-tile .discard-field-center {
   pointer-events: none;
 }
 
-/* ——— Settings: tile size ——— */
+/* ——— Settings ——— */
 .nav-submenu-wide {
-  min-width: 240px;
+  min-width: 260px;
+}
+
+.nav-submenu-wide .nav-setting + .nav-setting {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 0.15rem;
+  padding-top: 0.5rem;
 }
 
 .nav-setting {
@@ -1167,7 +1236,8 @@ body.dragging-tile .discard-field-center {
   cursor: default;
 }
 
-.tile-size-value {
+.tile-size-value,
+.bot-delay-value {
   flex: 1;
   text-align: center;
   font-size: 0.82rem;

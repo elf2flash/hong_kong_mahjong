@@ -13,7 +13,7 @@ function getGame(): Game
     if (empty($_SESSION['game'])) {
         $game = new Game();
         $game->newRound(false);
-        $game->processUntilHuman();
+        // Ботов крутит клиент (пауза + botStep)
         $_SESSION['game'] = $game->toArray();
     }
     return Game::fromArray($_SESSION['game']);
@@ -22,6 +22,14 @@ function getGame(): Game
 function saveGame(Game $game): void
 {
     $_SESSION['game'] = $game->toArray();
+}
+
+function respond(Game $game, array $extra = []): void
+{
+    echo json_encode(
+        array_merge(['ok' => true, 'state' => $game->toClientState()], $extra),
+        JSON_UNESCAPED_UNICODE
+    );
 }
 
 $input = json_decode(file_get_contents('php://input') ?: '{}', true) ?? [];
@@ -33,12 +41,6 @@ try {
     switch ($action) {
         case 'new':
             $game = new Game();
-            if (!empty($_SESSION['game'])) {
-                $old = Game::fromArray($_SESSION['game']);
-                foreach ($old->players as $i => $p) {
-                    // keep nothing on full reset unless scores
-                }
-            }
             $keep = !empty($input['keepScores']);
             if ($keep && !empty($_SESSION['game'])) {
                 $game = Game::fromArray($_SESSION['game']);
@@ -46,13 +48,20 @@ try {
             } else {
                 $game->newRound(false);
             }
-            $game->processUntilHuman();
             saveGame($game);
-            echo json_encode(['ok' => true, 'state' => $game->toClientState()], JSON_UNESCAPED_UNICODE);
+            respond($game);
             break;
 
         case 'state':
-            echo json_encode(['ok' => true, 'state' => $game->toClientState()], JSON_UNESCAPED_UNICODE);
+            respond($game);
+            break;
+
+        case 'botStep':
+            if ($game->isAwaitingBot()) {
+                $game->processBotTurn();
+                saveGame($game);
+            }
+            respond($game);
             break;
 
         case 'discard':
@@ -62,43 +71,32 @@ try {
                 if (!empty($res['claims'])) {
                     $game->resolveClaims();
                 }
-                if ($game->phase !== Game::PHASE_ENDED && $game->phase !== Game::PHASE_CLAIM) {
-                    $game->processUntilHuman();
-                } elseif ($game->phase === Game::PHASE_CLAIM) {
-                    $game->resolveClaims();
-                    if ($game->phase !== Game::PHASE_CLAIM && $game->phase !== Game::PHASE_ENDED) {
-                        $game->processUntilHuman();
-                    }
-                }
             }
             saveGame($game);
-            echo json_encode(['ok' => $res['ok'], 'error' => $res['error'] ?? null, 'state' => $game->toClientState()], JSON_UNESCAPED_UNICODE);
+            echo json_encode(
+                ['ok' => $res['ok'], 'error' => $res['error'] ?? null, 'state' => $game->toClientState()],
+                JSON_UNESCAPED_UNICODE
+            );
             break;
 
         case 'claim':
             $claimAction = $input['claim'] ?? 'pass';
             $chowOption = (int)($input['chowOption'] ?? 0);
             $res = $game->humanClaim($claimAction, $chowOption);
-            // После своего чоу/понга ход остаётся у игрока (фаза discard) — ботов не крутим.
-            // processUntilHuman только если ход ушёл дальше или нужно ждать другой клейм.
-            if (
-                $res['ok']
-                && $game->phase !== Game::PHASE_ENDED
-                && !(
-                    $game->phase === Game::PHASE_DISCARD
-                    && $game->currentPlayer === 0
-                )
-            ) {
-                $game->processUntilHuman();
-            }
             saveGame($game);
-            echo json_encode(['ok' => $res['ok'], 'error' => $res['error'] ?? null, 'state' => $game->toClientState()], JSON_UNESCAPED_UNICODE);
+            echo json_encode(
+                ['ok' => $res['ok'], 'error' => $res['error'] ?? null, 'state' => $game->toClientState()],
+                JSON_UNESCAPED_UNICODE
+            );
             break;
 
         case 'win':
             $res = $game->humanWin();
             saveGame($game);
-            echo json_encode(['ok' => $res['ok'], 'error' => $res['error'] ?? null, 'state' => $game->toClientState()], JSON_UNESCAPED_UNICODE);
+            echo json_encode(
+                ['ok' => $res['ok'], 'error' => $res['error'] ?? null, 'state' => $game->toClientState()],
+                JSON_UNESCAPED_UNICODE
+            );
             break;
 
         case 'draw':
@@ -106,13 +104,16 @@ try {
                 $game->drawForCurrent();
             }
             saveGame($game);
-            echo json_encode(['ok' => true, 'state' => $game->toClientState()], JSON_UNESCAPED_UNICODE);
+            respond($game);
             break;
 
         case 'insertDrawn':
             $res = $game->insertDrawn();
             saveGame($game);
-            echo json_encode(['ok' => $res['ok'], 'error' => $res['error'] ?? null, 'state' => $game->toClientState()], JSON_UNESCAPED_UNICODE);
+            echo json_encode(
+                ['ok' => $res['ok'], 'error' => $res['error'] ?? null, 'state' => $game->toClientState()],
+                JSON_UNESCAPED_UNICODE
+            );
             break;
 
         default:

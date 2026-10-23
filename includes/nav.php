@@ -35,11 +35,22 @@ $navCurrent = $navCurrent ?? 'game';
           <div class="tile-size-control" data-setting="tile-size">
             <span class="tile-size-label">Размер плитки</span>
             <div class="tile-size-row">
-              <button type="button" class="btn-size" data-tile-size="-1" aria-label="Уменьшить" title="Уменьшить на 10%">−</button>
+              <button type="button" class="btn-size" data-tile-size="dec" aria-label="Уменьшить" title="Уменьшить на 10%">−</button>
               <span class="tile-size-value" id="tileSizeValue">100%</span>
-              <button type="button" class="btn-size" data-tile-size="+1" aria-label="Увеличить" title="Увеличить на 10%">+</button>
+              <button type="button" class="btn-size" data-tile-size="inc" aria-label="Увеличить" title="Увеличить на 10%">+</button>
             </div>
             <p class="tile-size-hint">Шаг 10% · от −50% до +50%</p>
+          </div>
+        </li>
+        <li role="none" class="nav-setting">
+          <div class="tile-size-control" data-setting="bot-delay">
+            <span class="tile-size-label">Время на ход бота</span>
+            <div class="tile-size-row">
+              <button type="button" class="btn-size" data-bot-delay="dec" aria-label="Уменьшить" title="Уменьшить на 0.1 с">−</button>
+              <span class="bot-delay-value" id="botDelayValue">0.3 с</span>
+              <button type="button" class="btn-size" data-bot-delay="inc" aria-label="Увеличить" title="Увеличить на 0.1 с">+</button>
+            </div>
+            <p class="tile-size-hint">Шаг 0.1 с · от 0 до 3 с</p>
           </div>
         </li>
       </ul>

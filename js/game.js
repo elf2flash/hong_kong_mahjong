@@ -10,6 +10,65 @@
   let state = null;
   let selectedId = null;
   let busy = false;
+  let botsRunning = false;
+  /** @type {number | null} */
+  let thinkingSeat = null;
+  let botLoopGen = 0;
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function botDelayMs() {
+    return window.MahjongSettings?.getBotDelayMs?.() ?? 300;
+  }
+
+  function needsBot() {
+    return !!(state && state.awaitingBot && state.phase !== 'ended');
+  }
+
+  function isInputLocked() {
+    return busy || botsRunning;
+  }
+
+  async function runBotLoop() {
+    const gen = ++botLoopGen;
+    botsRunning = true;
+    try {
+      while (needsBot() && gen === botLoopGen) {
+        thinkingSeat = state.botActorId != null ? state.botActorId : state.currentPlayer;
+        render();
+        const ms = botDelayMs();
+        if (ms > 0) {
+          await sleep(ms);
+        }
+        if (gen !== botLoopGen) return;
+        try {
+          const data = await api('botStep');
+          if (data.state) state = data.state;
+        } catch (e) {
+          console.error(e);
+          break;
+        }
+        thinkingSeat = null;
+        render();
+      }
+    } finally {
+      if (gen === botLoopGen) {
+        thinkingSeat = null;
+        botsRunning = false;
+      }
+    }
+  }
+
+  async function applyState(data) {
+    if (data && data.state) state = data.state;
+    thinkingSeat = null;
+    render();
+    if (needsBot()) {
+      await runBotLoop();
+    }
+  }
 
   /** @type {{ tileId: number, source: HTMLElement, ghost: HTMLElement | null, startX: number, startY: number, moved: boolean } | null} */
   let drag = null;
@@ -19,7 +78,7 @@
   }
 
   function canDiscardNow() {
-    return !busy && isDiscardTurn();
+    return !isInputLocked() && isDiscardTurn();
   }
 
   function getDiscardZone() {
@@ -195,6 +254,17 @@
       meldsEl.appendChild(g);
     });
 
+    const isThinking = thinkingSeat === player.id;
+    const isHumanTurn =
+      player.isHuman &&
+      thinkingSeat == null &&
+      state.phase !== 'ended' &&
+      (
+        ((state.phase === 'draw' || state.phase === 'discard') && state.currentPlayer === player.id) ||
+        (state.phase === 'claim' && !!state.claimOptions)
+      );
+    const turnGlow = isThinking || isHumanTurn;
+
     // Ширина поля комбинаций: минимум 3 плитки, дальше по содержимому
     const meldField = seatEl.querySelector('.meld-field');
     if (meldField) {
@@ -208,12 +278,16 @@
       meldField.style.setProperty('--meld-cols', String(cols));
       meldField.classList.toggle('has-melds', melds.length > 0);
       meldField.classList.toggle('winner-field', isWinner);
+      meldField.classList.toggle('turn-glow', turnGlow);
     }
 
     const handField = seatEl.querySelector('.hand-field');
     const handEl = seatEl.querySelector('.hand');
     clear(handEl);
-    if (handField) handField.classList.toggle('winner-field', isWinner);
+    if (handField) {
+      handField.classList.toggle('winner-field', isWinner);
+      handField.classList.toggle('turn-glow', turnGlow);
+    }
 
     let handCols = 0;
     const revealHand = player.hand && player.hand.length > 0;
@@ -270,7 +344,15 @@
     }
 
     if (handField) {
-      handField.style.setProperty('--hand-cols', String(Math.max(1, handCols)));
+      const isSide = seatEl.classList.contains('seat-left') || seatEl.classList.contains('seat-right');
+      if (isSide) {
+        // Север / Юг: фиксированная сетка 4×4 обычных плиток
+        handField.style.setProperty('--hand-cols', '4');
+        handField.style.setProperty('--hand-rows', '4');
+        handEl.classList.toggle('back-hand', !revealHand);
+      } else {
+        handField.style.setProperty('--hand-cols', String(Math.max(1, handCols)));
+      }
     }
   }
 
@@ -280,9 +362,11 @@
     document.getElementById('roundWind').textContent = 'Круг: ' + windNames[state.roundWind];
     document.getElementById('wallCount').textContent = 'Стена: ' + state.wallRemaining;
     document.getElementById('phaseLabel').textContent =
-      state.phase === 'discard' && state.currentPlayer !== 0
-        ? 'Ход соперника…'
-        : phaseNames[state.phase] || state.phase;
+      thinkingSeat != null
+        ? 'Бот думает…'
+        : state.phase === 'discard' && state.currentPlayer !== 0
+          ? 'Ход соперника…'
+          : phaseNames[state.phase] || state.phase;
 
     // seats: 0 bottom, 1 right, 2 top, 3 left
     document.querySelectorAll('.seat').forEach((seatEl) => {
@@ -389,79 +473,75 @@
   }
 
   async function doDiscard(tileId) {
-    if (busy) return;
+    if (isInputLocked()) return;
     busy = true;
     try {
       const data = await api('discard', { tileId });
       if (!data.ok) {
         alert(data.error || 'Ошибка сброса');
       }
-      state = data.state;
       selectedId = null;
+      await applyState(data);
     } finally {
       busy = false;
     }
-    render();
   }
 
   async function insertDrawn() {
-    if (busy || !state?.pendingDrawnId) return;
+    if (isInputLocked() || !state?.pendingDrawnId) return;
     busy = true;
     try {
       const data = await api('insertDrawn');
       if (!data.ok) {
         alert(data.error || 'Ошибка');
       }
-      state = data.state;
+      await applyState(data);
     } finally {
       busy = false;
     }
-    render();
   }
 
   async function doClaim(claim, chowOption = 0) {
-    if (busy) return;
+    if (isInputLocked()) return;
     busy = true;
     try {
       const data = await api('claim', { claim, chowOption });
       if (!data.ok) alert(data.error || 'Ошибка');
-      state = data.state;
+      await applyState(data);
     } finally {
       busy = false;
     }
-    render();
   }
 
   async function doWin() {
-    if (busy) return;
+    if (isInputLocked()) return;
     busy = true;
     try {
       const data = await api('win');
       if (!data.ok) alert(data.error || 'Нельзя выиграть сейчас');
-      state = data.state;
+      await applyState(data);
     } finally {
       busy = false;
     }
-    render();
   }
 
   async function newGame(keepScores = false) {
-    if (busy) return;
+    botLoopGen += 1;
+    thinkingSeat = null;
+    botsRunning = false;
     busy = true;
     try {
       const data = await api('new', { keepScores });
-      state = data.state;
       selectedId = null;
+      await applyState(data);
     } finally {
       busy = false;
     }
-    render();
   }
 
   async function load() {
     const data = await api('state');
-    state = data.state;
-    render();
+    await applyState(data);
   }
 
   document.getElementById('btnNew').addEventListener('click', () => newGame(false));

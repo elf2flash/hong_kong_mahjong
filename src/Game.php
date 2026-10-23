@@ -414,57 +414,104 @@ class Game
         $this->currentPlayer = ($this->currentPlayer + 1) % 4;
         $this->phase = self::PHASE_DRAW;
         $this->lastDiscardPlayer = null;
-
-        // Автоходы ботов
-        $this->processUntilHuman();
+        // Ходы ботов крутит клиент (пауза + botStep).
+        // Человеку добор делаем сразу — иначе UI застревает на «Добор».
+        $p = $this->players[$this->currentPlayer] ?? null;
+        if ($p && $p->isHuman) {
+            $this->drawForCurrent();
+        }
     }
 
+    /** Нужен ли ещё ход бота (клиент покажет паузу и вызовет botStep). */
+    public function isAwaitingBot(): bool
+    {
+        if ($this->phase === self::PHASE_ENDED) {
+            return false;
+        }
+        if ($this->phase === self::PHASE_CLAIM) {
+            if (!$this->claimQueue) {
+                return false;
+            }
+            $pid = $this->claimQueue[0];
+            return !($this->players[$pid]->isHuman ?? false);
+        }
+        if ($this->phase === self::PHASE_DRAW || $this->phase === self::PHASE_DISCARD) {
+            $p = $this->players[$this->currentPlayer] ?? null;
+            return $p !== null && !$p->isHuman;
+        }
+        return false;
+    }
+
+    /** Кого подсвечивать на паузе перед ходом бота. */
+    public function botActorId(): ?int
+    {
+        if (!$this->isAwaitingBot()) {
+            return null;
+        }
+        if ($this->phase === self::PHASE_CLAIM && $this->claimQueue) {
+            return (int)$this->claimQueue[0];
+        }
+        return $this->currentPlayer;
+    }
+
+    /**
+     * Один «тик» бота: полный ход (добор+сброс/победа) или разрешение клеймов ботов до человека.
+     * Пауза между тиками — на клиенте.
+     */
+    public function processBotTurn(): void
+    {
+        if ($this->phase === self::PHASE_ENDED) {
+            return;
+        }
+
+        if ($this->phase === self::PHASE_CLAIM) {
+            $this->resolveClaims();
+            return;
+        }
+
+        $p = $this->players[$this->currentPlayer] ?? null;
+        if ($p === null) {
+            return;
+        }
+
+        if ($p->isHuman) {
+            if ($this->phase === self::PHASE_DRAW) {
+                $this->drawForCurrent();
+            }
+            return;
+        }
+
+        if ($this->phase === self::PHASE_DRAW) {
+            $this->drawForCurrent();
+            if ($this->phase === self::PHASE_ENDED) {
+                return;
+            }
+        }
+
+        if ($this->phase === self::PHASE_DISCARD) {
+            $p = $this->players[$this->currentPlayer];
+            if ($this->checker->canWin($p->hand, $p->melds) && $this->ai->wantsWin($p, true, $p->seatWind, $this->roundWind)) {
+                $this->declareWin($this->currentPlayer, true);
+                return;
+            }
+            $tileId = $this->ai->chooseDiscard($p, $p->seatWind, $this->roundWind);
+            $res = $this->discard($this->currentPlayer, $tileId);
+            if (!empty($res['claims'])) {
+                $this->resolveClaims();
+            }
+        }
+    }
+
+    /** Прокрутить всех ботов сразу (без пауз) — для совместимости. */
     public function processUntilHuman(): void
     {
         $guard = 0;
-        while ($this->phase !== self::PHASE_ENDED && $guard++ < 50) {
-            $p = $this->players[$this->currentPlayer];
-
-            if ($this->phase === self::PHASE_CLAIM) {
-                $this->resolveClaims();
-                if ($this->phase === self::PHASE_CLAIM) {
-                    // ждём человека
-                    return;
-                }
-                continue;
-            }
-
-            if ($p->isHuman) {
-                if ($this->phase === self::PHASE_DRAW) {
-                    $this->drawForCurrent();
-                }
-                // человек должен сбросить или объявить победу
-                return;
-            }
-
-            // Бот
-            if ($this->phase === self::PHASE_DRAW) {
-                $this->drawForCurrent();
-                if ($this->phase === self::PHASE_ENDED) {
-                    return;
-                }
-            }
-
-            if ($this->phase === self::PHASE_DISCARD) {
-                $p = $this->players[$this->currentPlayer];
-                if ($this->checker->canWin($p->hand, $p->melds) && $this->ai->wantsWin($p, true, $p->seatWind, $this->roundWind)) {
-                    $this->declareWin($this->currentPlayer, true);
-                    return;
-                }
-                $tileId = $this->ai->chooseDiscard($p, $p->seatWind, $this->roundWind);
-                $res = $this->discard($this->currentPlayer, $tileId);
-                if (!empty($res['claims'])) {
-                    $this->resolveClaims();
-                    if ($this->phase === self::PHASE_CLAIM) {
-                        return; // человек может клеймить
-                    }
-                }
-            }
+        while ($this->isAwaitingBot() && $guard++ < 50) {
+            $this->processBotTurn();
+        }
+        $p = $this->players[$this->currentPlayer] ?? null;
+        if ($p && $p->isHuman && $this->phase === self::PHASE_DRAW) {
+            $this->drawForCurrent();
         }
     }
 
@@ -589,6 +636,8 @@ class Game
             'log' => $this->log,
             'result' => $this->result,
             'minFan' => Scorer::MIN_FAN,
+            'awaitingBot' => $this->isAwaitingBot(),
+            'botActorId' => $this->botActorId(),
         ];
     }
 

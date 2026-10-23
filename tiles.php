@@ -10,7 +10,7 @@ $navCurrent = 'help';
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=<?= filemtime(__DIR__ . '/css/style.css') ?>">
 </head>
 <body class="page-catalog">
   <header class="topbar topbar-nav">
@@ -75,10 +75,10 @@ $navCurrent = 'help';
     </div>
   </div>
 
-  <script src="js/tiles.js"></script>
-  <script src="js/nav.js"></script>
-  <script src="js/settings.js"></script>
-  <script src="js/catalog.js"></script>
-  <script src="js/tips.js"></script>
+  <script src="js/tiles.js?v=<?= filemtime(__DIR__ . '/js/tiles.js') ?>"></script>
+  <script src="js/nav.js?v=<?= filemtime(__DIR__ . '/js/nav.js') ?>"></script>
+  <script src="js/settings.js?v=<?= filemtime(__DIR__ . '/js/settings.js') ?>"></script>
+  <script src="js/catalog.js?v=<?= filemtime(__DIR__ . '/js/catalog.js') ?>"></script>
+  <script src="js/tips.js?v=<?= filemtime(__DIR__ . '/js/tips.js') ?>"></script>
 </body>
 </html>
