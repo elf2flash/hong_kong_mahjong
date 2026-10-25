@@ -35,6 +35,8 @@ class Game
     public ?array $pendingClaim = null;
     public array $log = [];
     public ?array $result = null;
+    /** Краткое объявление клейма бота: ['playerId'=>int,'text'=>string]|null */
+    public ?array $announce = null;
     public int $wallDead = 14; // reserve (simplified)
     /** ID только что взятой плитки (показывается отдельно справа, пока не «вставлена») */
     public ?int $pendingDrawnId = null;
@@ -327,20 +329,70 @@ class Game
 
     public function resolveClaims(): void
     {
-        // Автоматически обработать ботов в очереди; человек ждёт API
+        // Совместимость: крутить ботов по одному, пока очередь не на человеке
         while ($this->phase === self::PHASE_CLAIM && $this->claimQueue) {
             $pid = $this->claimQueue[0];
-            $pl = $this->players[$pid];
-            if ($pl->isHuman) {
-                return; // ждём ответа игрока
+            if ($this->players[$pid]->isHuman) {
+                return;
             }
-            $opts = $this->claimOptions[$pid] ?? [];
-            $decision = $opts['aiAction'] ?? ['action' => 'pass'];
-            $this->applyClaim($pid, $decision['action'], $decision['chowOption'] ?? 0);
+            $this->processOneBotClaim();
+            if ($this->phase === self::PHASE_ENDED) {
+                return;
+            }
+            // После чоу/понга/конга фаза уже не CLAIM — выходим (клиент покажет паузу)
+            if ($this->phase !== self::PHASE_CLAIM) {
+                return;
+            }
         }
 
         if ($this->phase === self::PHASE_CLAIM && !$this->claimQueue) {
             $this->advanceTurn();
+        }
+    }
+
+    /** Один клейм бота из очереди (для паузы и надписи Чоу!/Понг!/Конг!). */
+    public function processOneBotClaim(): void
+    {
+        $this->announce = null;
+        if ($this->phase !== self::PHASE_CLAIM) {
+            return;
+        }
+        if (!$this->claimQueue) {
+            $this->advanceTurn();
+            return;
+        }
+
+        $pid = (int)$this->claimQueue[0];
+        $pl = $this->players[$pid];
+        if ($pl->isHuman) {
+            return;
+        }
+
+        $opts = $this->claimOptions[$pid] ?? [];
+        $decision = $opts['aiAction'] ?? ['action' => 'pass'];
+        $action = (string)($decision['action'] ?? 'pass');
+
+        if ($action === 'pass') {
+            array_shift($this->claimQueue);
+            unset($this->claimOptions[$pid]);
+            if ($this->phase === self::PHASE_CLAIM && !$this->claimQueue) {
+                $this->advanceTurn();
+            }
+            return;
+        }
+
+        $this->applyClaim($pid, $action, (int)($decision['chowOption'] ?? 0));
+
+        if (in_array($action, ['chow', 'pung', 'kong'], true)) {
+            $this->announce = [
+                'playerId' => $pid,
+                'text' => match ($action) {
+                    'chow' => 'Чоу!',
+                    'pung' => 'Понг!',
+                    'kong' => 'Конг!',
+                    default => '',
+                },
+            ];
         }
     }
 
@@ -357,7 +409,7 @@ class Game
             if ($action === 'pass') {
                 $this->claimQueue = array_values(array_filter($this->claimQueue, fn($id) => $id !== 0));
                 unset($this->claimOptions[0]);
-                $this->resolveClaims();
+                $this->announce = null;
                 if ($this->phase === self::PHASE_CLAIM && !$this->claimQueue) {
                     $this->advanceTurn();
                 }
@@ -372,7 +424,7 @@ class Game
         if ($action === 'pass') {
             array_shift($this->claimQueue);
             unset($this->claimOptions[0]);
-            $this->resolveClaims();
+            $this->announce = null;
             if ($this->phase === self::PHASE_CLAIM && !$this->claimQueue) {
                 $this->advanceTurn();
             }
@@ -561,8 +613,10 @@ class Game
             return;
         }
 
+        $this->announce = null;
+
         if ($this->phase === self::PHASE_CLAIM) {
-            $this->resolveClaims();
+            $this->processOneBotClaim();
             return;
         }
 
@@ -585,17 +639,15 @@ class Game
             }
         }
 
-            if ($this->phase === self::PHASE_DISCARD) {
+        if ($this->phase === self::PHASE_DISCARD) {
             $p = $this->players[$this->currentPlayer];
             if ($this->mayWin($p, true) && $this->ai->wantsWin($p, true, $p->seatWind, $this->roundWind)) {
                 $this->declareWin($this->currentPlayer, true);
                 return;
             }
             $tileId = $this->ai->chooseDiscard($p, $p->seatWind, $this->roundWind);
-            $res = $this->discard($this->currentPlayer, $tileId);
-            if (!empty($res['claims'])) {
-                $this->resolveClaims();
-            }
+            // После сброса клеймы ботов — отдельными botStep (с паузой и надписью)
+            $this->discard($this->currentPlayer, $tileId);
         }
     }
 
@@ -716,6 +768,7 @@ class Game
             'roundWind' => $this->roundWind,
             'requireMinFan' => $this->requireMinFan,
             'winMode' => $this->requireMinFan ? 'min3' : 'any',
+            'announce' => $this->announce,
             'wallRemaining' => max(0, $this->deck->remaining() - $this->wallDead),
             // Сколько плиток ещё в стене (рубашки); лица — только после конца раздачи
             'wallCount' => $this->deck->remaining(),

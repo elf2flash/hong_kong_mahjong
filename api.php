@@ -77,12 +77,9 @@ try {
 
         case 'discard':
             $tileId = (int)($input['tileId'] ?? -1);
+            $game->announce = null;
             $res = $game->discard(0, $tileId);
-            if ($res['ok']) {
-                if (!empty($res['claims'])) {
-                    $game->resolveClaims();
-                }
-            }
+            // Клеймы ботов обрабатываются по одному через botStep (пауза + «Понг!» и т.п.)
             saveGame($game);
             echo json_encode(
                 ['ok' => $res['ok'], 'error' => $res['error'] ?? null, 'state' => $game->toClientState()],

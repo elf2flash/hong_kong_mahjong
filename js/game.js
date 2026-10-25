@@ -13,6 +13,8 @@
   let botsRunning = false;
   /** @type {number | null} */
   let thinkingSeat = null;
+  /** @type {{ playerId: number, text: string } | null} */
+  let claimAnnounce = null;
   let botLoopGen = 0;
 
   function sleep(ms) {
@@ -36,6 +38,7 @@
     botsRunning = true;
     try {
       while (needsBot() && gen === botLoopGen) {
+        claimAnnounce = null;
         thinkingSeat = state.botActorId != null ? state.botActorId : state.currentPlayer;
         render();
         const ms = botDelayMs();
@@ -51,11 +54,24 @@
           break;
         }
         thinkingSeat = null;
+
+        // После Чоу/Понг/Конг — показать надпись ещё на время хода бота
+        const ann = state.announce;
+        if (ann && ann.text && ann.playerId != null) {
+          claimAnnounce = { playerId: ann.playerId, text: ann.text };
+          render();
+          if (ms > 0) {
+            await sleep(ms);
+          }
+          if (gen !== botLoopGen) return;
+          claimAnnounce = null;
+        }
         render();
       }
     } finally {
       if (gen === botLoopGen) {
         thinkingSeat = null;
+        claimAnnounce = null;
         botsRunning = false;
       }
     }
@@ -283,6 +299,13 @@
     seatEl.querySelector('.seat-name').textContent =
       player.name + (player.isDealer ? ' 莊' : '') + (isWinner ? ' 和' : '');
     seatEl.querySelector('.seat-score').textContent = player.score + ' pts';
+
+    const annEl = seatEl.querySelector('.seat-announce');
+    if (annEl) {
+      const show = !!(claimAnnounce && claimAnnounce.playerId === player.id && claimAnnounce.text);
+      annEl.textContent = show ? claimAnnounce.text : '';
+      annEl.classList.toggle('is-visible', show);
+    }
 
     const meldsEl = seatEl.querySelector('.melds');
     clear(meldsEl);

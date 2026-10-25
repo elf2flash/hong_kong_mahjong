@@ -272,6 +272,24 @@ body {
   content: "· ";
 }
 
+.seat-announce {
+  display: none;
+  margin-left: 0.15rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 6px;
+  background: rgba(212, 160, 23, 0.28);
+  border: 1px solid rgba(212, 160, 23, 0.75);
+  color: #ffe08a;
+  font-weight: 800;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  animation: fade-up 0.18s ease;
+}
+
+.seat-announce.is-visible {
+  display: inline-flex;
+}
+
 .center {
   --river-gap: 4px;
   --river-cols: 10;

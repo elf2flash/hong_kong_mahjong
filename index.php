@@ -26,7 +26,7 @@ $navCurrent = 'game';
 
     <main class="table">
       <div class="seat seat-top" data-seat="2">
-        <div class="seat-info"><span class="seat-name"></span><span class="seat-score"></span></div>
+        <div class="seat-info"><span class="seat-name"></span><span class="seat-score"></span><span class="seat-announce" aria-live="polite"></span></div>
         <div class="seat-row">
           <div class="meld-field">
             <span class="hand-field-label">Комбинации</span>
@@ -41,7 +41,7 @@ $navCurrent = 'game';
 
       <div class="mid-row">
         <div class="seat seat-left" data-seat="3">
-          <div class="seat-info"><span class="seat-name"></span><span class="seat-score"></span></div>
+          <div class="seat-info"><span class="seat-name"></span><span class="seat-score"></span><span class="seat-announce" aria-live="polite"></span></div>
           <div class="meld-field">
             <span class="hand-field-label">Комбинации</span>
             <div class="melds"></div>
@@ -65,7 +65,7 @@ $navCurrent = 'game';
         </div>
 
         <div class="seat seat-right" data-seat="1">
-          <div class="seat-info"><span class="seat-name"></span><span class="seat-score"></span></div>
+          <div class="seat-info"><span class="seat-name"></span><span class="seat-score"></span><span class="seat-announce" aria-live="polite"></span></div>
           <div class="meld-field">
             <span class="hand-field-label">Комбинации</span>
             <div class="melds"></div>
@@ -81,6 +81,7 @@ $navCurrent = 'game';
         <div class="seat-info">
           <span class="seat-name"></span>
           <span class="seat-score"></span>
+          <span class="seat-announce" aria-live="polite"></span>
           <button type="button" id="btnWin" class="btn btn-win hidden">自摸 Выиграть</button>
         </div>
         <div class="seat-row">
