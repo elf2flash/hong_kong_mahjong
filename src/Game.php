@@ -22,7 +22,9 @@ class Game
     public Deck $deck;
     public int $currentPlayer = 0;
     public int $dealer = 0;
-    public int $roundWind = 1; // East round
+    public int $roundWind = 1; // 1=東 2=南 3=西 4=北 — ветер круга
+    /** Сколько раз дилер сменился в текущем круге (после 4 → следующий ветер круга). */
+    public int $dealerPassesInRound = 0;
     public string $phase = self::PHASE_DRAW;
     public ?Tile $lastDiscard = null;
     public ?int $lastDiscardPlayer = null;
@@ -49,6 +51,40 @@ class Game
         $this->ai = new AI();
     }
 
+    /** Подпись по текущему ветру места (門風), не по «стулу». */
+    public static function windLabel(int $wind): array
+    {
+        return match ($wind) {
+            1 => ['en' => 'East', 'zh' => '東'],
+            2 => ['en' => 'South', 'zh' => '南'],
+            3 => ['en' => 'West', 'zh' => '西'],
+            4 => ['en' => 'North', 'zh' => '北'],
+            default => ['en' => '?', 'zh' => '?'],
+        };
+    }
+
+    public static function playerDisplayName(bool $isHuman, int $seatWind): string
+    {
+        $w = self::windLabel($seatWind);
+        $who = $isHuman ? 'Вы' : 'Бот';
+        return "{$who} ({$w['en']}) {$w['zh']}";
+    }
+
+    /**
+     * Сменить дилера на следующего. После 4 смен — следующий ветер круга.
+     */
+    private function passDealer(): void
+    {
+        $this->dealer = ($this->dealer + 1) % 4;
+        $this->dealerPassesInRound++;
+        if ($this->dealerPassesInRound >= 4) {
+            $this->dealerPassesInRound = 0;
+            $this->roundWind = ($this->roundWind % 4) + 1;
+            $w = self::windLabel($this->roundWind);
+            $this->addLog('Новый круг ветра: ' . $w['zh'] . ' ' . $w['en']);
+        }
+    }
+
     public function newRound(bool $keepScores = true): void
     {
         $scores = [];
@@ -58,17 +94,18 @@ class Game
             }
         }
 
-        // Позиции за столом: Восток / Юг / Запад / Север
-        $names = [
-            'Вы (East) 東',
-            'Бот Юг (South) 南',
-            'Бот Запад (West) 西',
-            'Бот Север (North) 北',
-        ];
+        if (!$keepScores) {
+            // Новая партия: случайный первый дилер (門風 East), круг с 東
+            $this->dealer = random_int(0, 3);
+            $this->roundWind = 1;
+            $this->dealerPassesInRound = 0;
+        }
+
+        // 門風: дилер = East, далее против часовой South → West → North
         $this->players = [];
         for ($i = 0; $i < 4; $i++) {
             $wind = (($i - $this->dealer + 4) % 4) + 1;
-            $p = new Player($i, $names[$i], $i === 0, $wind);
+            $p = new Player($i, self::playerDisplayName($i === 0, $wind), $i === 0, $wind);
             $p->isDealer = ($i === $this->dealer);
             if (isset($scores[$i])) {
                 $p->score = $scores[$i];
@@ -574,9 +611,9 @@ class Game
         $this->phase = self::PHASE_ENDED;
         $this->addLog($pl->name . ' побеждает! ' . $fan . ' фан' . ($selfDraw ? ' (自摸)' : ''));
 
-        // Следующий дилер: если дилер выиграл — остаётся, иначе следующий
+        // Дилер выиграл — остаётся; иначе ход дилера переходит дальше
         if ($playerId !== $this->dealer) {
-            $this->dealer = ($this->dealer + 1) % 4;
+            $this->passDealer();
         }
     }
 
@@ -587,10 +624,10 @@ class Game
             'winner' => null,
             'winnerName' => null,
             'draw' => true,
-            'message' => 'Ничья — стена закончилась',
+            'message' => 'Ничья — стена закончилась (повтор, дилер тот же)',
         ];
-        $this->addLog('Ничья (стена закончилась)');
-        $this->dealer = ($this->dealer + 1) % 4;
+        $this->addLog('Ничья (стена закончилась) — дилер не меняется');
+        // Повтор раздачи: дилер остаётся
     }
 
     public function humanWin(): array
@@ -660,6 +697,7 @@ class Game
             'currentPlayer' => $this->currentPlayer,
             'dealer' => $this->dealer,
             'roundWind' => $this->roundWind,
+            'dealerPassesInRound' => $this->dealerPassesInRound,
             'phase' => $this->phase,
             'lastDiscard' => $this->lastDiscard?->jsonSerialize(),
             'lastDiscardPlayer' => $this->lastDiscardPlayer,
@@ -681,6 +719,7 @@ class Game
         $g->currentPlayer = (int)$data['currentPlayer'];
         $g->dealer = (int)$data['dealer'];
         $g->roundWind = (int)$data['roundWind'];
+        $g->dealerPassesInRound = (int)($data['dealerPassesInRound'] ?? 0);
         $g->phase = $data['phase'];
         $g->lastDiscard = $data['lastDiscard'] ? Tile::fromArray($data['lastDiscard']) : null;
         $g->lastDiscardPlayer = $data['lastDiscardPlayer'];
