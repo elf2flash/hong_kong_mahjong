@@ -470,11 +470,13 @@ body {
   gap: 4px;
   justify-content: flex-start;
   align-content: flex-start;
-  max-height: calc(3 * var(--tile-h) + 2 * 4px);
+  max-height: calc(5 * var(--tile-h) + 4 * 4px);
+  min-height: var(--tile-h);
   overflow: auto;
 }
 
-.wall-tiles .tile {
+.wall-tiles .tile,
+.wall-tiles .tile-back {
   width: var(--tile-w);
   height: var(--tile-h);
   flex: 0 0 auto;

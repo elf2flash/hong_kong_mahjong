@@ -628,7 +628,8 @@ class Game
             'dealer' => $this->dealer,
             'roundWind' => $this->roundWind,
             'wallRemaining' => max(0, $this->deck->remaining() - $this->wallDead),
-            // Остаток стены (включая мёртвую) — только после конца раздачи
+            // Сколько плиток ещё в стене (рубашки); лица — только после конца раздачи
+            'wallCount' => $this->deck->remaining(),
             'wallTiles' => $ended ? $this->deck->toArray() : null,
             'lastDiscard' => $this->lastDiscard?->jsonSerialize(),
             'lastDiscardPlayer' => $this->lastDiscardPlayer,

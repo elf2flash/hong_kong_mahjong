@@ -239,15 +239,28 @@
   function renderWall() {
     const field = document.getElementById('wallField');
     const el = document.getElementById('wallTiles');
+    const label = document.getElementById('wallFieldLabel');
     if (!field || !el) return;
     clear(el);
-    const tiles = state.phase === 'ended' && Array.isArray(state.wallTiles) ? state.wallTiles : null;
-    if (!tiles || !tiles.length) {
-      field.classList.add('hidden');
+    field.classList.remove('hidden');
+
+    const ended = state.phase === 'ended';
+    const openTiles = ended && Array.isArray(state.wallTiles) ? state.wallTiles : null;
+
+    if (label) {
+      label.textContent = ended ? 'Остатки стены' : 'Стена';
+    }
+
+    if (openTiles) {
+      openTiles.forEach((t) => el.appendChild(tileEl(t)));
       return;
     }
-    field.classList.remove('hidden');
-    tiles.forEach((t) => el.appendChild(tileEl(t)));
+
+    // Во время партии — только рубашки (лица не раскрываем)
+    const n = Math.max(0, Number(state.wallCount ?? state.wallRemaining) || 0);
+    for (let i = 0; i < n; i++) {
+      el.appendChild(tileEl(null, { back: true }));
+    }
   }
 
   function renderSeat(seatEl, player, isCurrent) {

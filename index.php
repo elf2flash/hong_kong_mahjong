@@ -93,8 +93,8 @@ $navCurrent = 'game';
             <div class="hand player-hand" id="playerHand"></div>
           </div>
         </div>
-        <div id="wallField" class="wall-field hidden">
-          <span class="hand-field-label">Остатки стены</span>
+        <div id="wallField" class="wall-field">
+          <span class="hand-field-label" id="wallFieldLabel">Стена</span>
           <div class="wall-tiles" id="wallTiles"></div>
         </div>
       </div>
