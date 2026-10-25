@@ -32,7 +32,8 @@ class Scorer
         int $seatWind,
         int $roundWind,
         bool $selfDraw,
-        bool $isDealer
+        bool $isDealer,
+        bool $grantNoFlowerBonus = true
     ): array {
         $wins = $this->checker->allWins($concealed, $openMelds);
         if (!$wins) {
@@ -42,7 +43,16 @@ class Scorer
         $best = ['fan' => 0, 'details' => [], 'valid' => false];
 
         foreach ($wins as $win) {
-            $r = $this->scoreDecomposition($win, $openMelds, $seatWind, $roundWind, $selfDraw, $isDealer, $concealed);
+            $r = $this->scoreDecomposition(
+                $win,
+                $openMelds,
+                $seatWind,
+                $roundWind,
+                $selfDraw,
+                $isDealer,
+                $concealed,
+                $grantNoFlowerBonus
+            );
             if ($r['fan'] > $best['fan']) {
                 $best = $r;
             }
@@ -59,7 +69,8 @@ class Scorer
         int $roundWind,
         bool $selfDraw,
         bool $isDealer,
-        array $concealed
+        array $concealed,
+        bool $grantNoFlowerBonus = true
     ): array {
         $fan = 0;
         $details = [];
@@ -276,9 +287,8 @@ class Scorer
             // already have self-draw
         }
 
-        // 無花雞 / chicken hand — give 無番 but we require MIN_FAN
-        // Add 花牌 substitute: 無花 (no flowers) as +1 when otherwise short and all chows path
-        if ($fan < self::MIN_FAN) {
+        // 無花 — бонус «без цветов» только в режиме без строгого минимума фанов
+        if ($grantNoFlowerBonus && $fan < self::MIN_FAN) {
             $fan += 1;
             $details[] = '無花 No flowers (+1)';
         }

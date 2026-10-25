@@ -12,6 +12,7 @@ function getGame(): Game
 {
     if (empty($_SESSION['game'])) {
         $game = new Game();
+        $game->requireMinFan = (bool)($_SESSION['requireMinFan'] ?? false);
         $game->newRound(false);
         // Ботов крутит клиент (пауза + botStep)
         $_SESSION['game'] = $game->toArray();
@@ -22,6 +23,7 @@ function getGame(): Game
 function saveGame(Game $game): void
 {
     $_SESSION['game'] = $game->toArray();
+    $_SESSION['requireMinFan'] = $game->requireMinFan;
 }
 
 function respond(Game $game, array $extra = []): void
@@ -40,16 +42,25 @@ try {
 
     switch ($action) {
         case 'new':
-            $game = new Game();
             $keep = !empty($input['keepScores']);
+            $mode = (bool)($_SESSION['requireMinFan'] ?? false);
             if ($keep && !empty($_SESSION['game'])) {
                 $game = Game::fromArray($_SESSION['game']);
                 $game->newRound(true);
             } else {
+                $game = new Game();
+                $game->requireMinFan = $mode;
                 $game->newRound(false);
             }
             saveGame($game);
             respond($game);
+            break;
+
+        case 'setWinMode':
+            $mode = (string)($input['mode'] ?? 'any');
+            $game->requireMinFan = ($mode === 'min3');
+            saveGame($game);
+            respond($game, ['winMode' => $game->requireMinFan ? 'min3' : 'any']);
             break;
 
         case 'state':

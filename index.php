@@ -103,7 +103,7 @@ $navCurrent = 'game';
     <aside class="log-panel">
       <h2>Журнал</h2>
       <ul id="log"></ul>
-      <p class="hint">Минимум <?= 3 ?> фана · Чоу / Понг / Конг / Махджонг</p>
+      <p class="hint">Без ограничения по фанам · Чоу / Понг / Конг / Махджонг</p>
     </aside>
   </div>
   <script src="js/tiles.js?v=<?= filemtime(__DIR__ . '/js/tiles.js') ?>"></script>

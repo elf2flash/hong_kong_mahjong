@@ -1,6 +1,7 @@
 (() => {
   const SCALE_KEY = 'hk-mahjong-tile-scale';
   const BOT_DELAY_KEY = 'hk-mahjong-bot-delay';
+  const WIN_MODE_KEY = 'hk-mahjong-win-mode';
 
   const SCALE_STEP = 0.1;
   const SCALE_MIN = 0.5;
@@ -48,12 +49,44 @@
 
   let scale = loadScale();
   let botDelay = loadDelay();
+  let winMode = loadWinMode();
+
+  function loadWinMode() {
+    const raw = localStorage.getItem(WIN_MODE_KEY);
+    return raw === 'min3' ? 'min3' : 'any';
+  }
 
   function persist(key, value) {
     try {
       localStorage.setItem(key, String(value));
     } catch (_) {
       /* ignore quota / private mode */
+    }
+  }
+
+  function syncWinModeUI(mode) {
+    winMode = mode === 'min3' ? 'min3' : 'any';
+    document.querySelectorAll('[data-win-mode]').forEach((btn) => {
+      btn.classList.toggle('is-selected', btn.getAttribute('data-win-mode') === winMode);
+    });
+  }
+
+  async function setWinMode(mode) {
+    const next = mode === 'min3' ? 'min3' : 'any';
+    syncWinModeUI(next);
+    persist(WIN_MODE_KEY, next);
+    try {
+      const res = await fetch('api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'setWinMode', mode: next }),
+      });
+      const data = await res.json();
+      if (data.state && window.MahjongGame?.onWinModeChanged) {
+        window.MahjongGame.onWinModeChanged(data.state);
+      }
+    } catch (e) {
+      console.error(e);
     }
   }
 
@@ -110,11 +143,22 @@
       const dir = delayBtn.getAttribute('data-bot-delay');
       const delta = dir === 'inc' || dir === '+1' ? 1 : -1;
       applyDelay(botDelay + delta * DELAY_STEP);
+      return;
+    }
+
+    const modeBtn = e.target.closest('[data-win-mode]');
+    if (modeBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      setWinMode(modeBtn.getAttribute('data-win-mode'));
     }
   }
 
   applyScale(scale);
   applyDelay(botDelay);
+  syncWinModeUI(winMode);
+  // Синхронизировать режим с сервером при загрузке страницы
+  setWinMode(winMode);
 
   // Делегирование: работает даже если кнопки в выпадающем меню
   document.addEventListener('click', onSettingsClick, true);
@@ -122,5 +166,7 @@
   window.MahjongSettings = {
     getBotDelaySec: () => botDelay,
     getBotDelayMs: () => Math.round(botDelay * 1000),
+    getWinMode: () => winMode,
+    syncWinModeUI,
   };
 })();

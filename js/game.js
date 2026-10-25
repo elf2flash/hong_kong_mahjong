@@ -64,6 +64,9 @@
   async function applyState(data) {
     if (data && data.state) state = data.state;
     thinkingSeat = null;
+    if (state?.winMode && window.MahjongSettings?.syncWinModeUI) {
+      window.MahjongSettings.syncWinModeUI(state.winMode);
+    }
     render();
     if (needsBot()) {
       await runBotLoop();
@@ -388,6 +391,13 @@
 
     document.getElementById('roundWind').textContent = 'Круг: ' + windNames[state.roundWind];
     document.getElementById('wallCount').textContent = 'Стена: ' + state.wallRemaining;
+
+    const hint = document.querySelector('.log-panel .hint');
+    if (hint) {
+      hint.textContent = state.requireMinFan
+        ? 'Минимум 3 фана · Чоу / Понг / Конг / Махджонг'
+        : 'Без ограничения по фанам · Чоу / Понг / Конг / Махджонг';
+    }
     document.getElementById('phaseLabel').textContent =
       thinkingSeat != null
         ? 'Бот думает…'
@@ -574,6 +584,13 @@
 
   document.getElementById('btnNew').addEventListener('click', () => newGame(false));
   document.getElementById('btnWin').addEventListener('click', doWin);
+
+  window.MahjongGame = {
+    onWinModeChanged(nextState) {
+      if (!nextState) return;
+      applyState({ state: nextState });
+    },
+  };
 
   load().catch((e) => {
     console.error(e);

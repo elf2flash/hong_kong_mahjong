@@ -20,7 +20,7 @@
 
   document.addEventListener('click', (e) => {
     // Клики по пунктам/кнопкам внутри меню не закрывают его
-    if (e.target.closest('.nav-submenu, .nav-setting, .btn-size')) return;
+    if (e.target.closest('.nav-submenu, .nav-setting, .btn-size, .nav-mode')) return;
     document.querySelectorAll('.nav-item.has-submenu.is-open').forEach((item) => {
       item.classList.remove('is-open');
       const t = item.querySelector('.nav-trigger');

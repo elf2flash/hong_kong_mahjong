@@ -38,6 +38,11 @@ class Game
     public int $wallDead = 14; // reserve (simplified)
     /** ID только что взятой плитки (показывается отдельно справа, пока не «вставлена») */
     public ?int $pendingDrawnId = null;
+    /**
+     * false — победа без ограничения по фанам (как раньше);
+     * true — нужно минимум Scorer::MIN_FAN фанов.
+     */
+    public bool $requireMinFan = false;
 
     private WinChecker $checker;
     private Scorer $scorer;
@@ -178,13 +183,47 @@ class Game
         $this->pendingDrawnId = $p->isHuman ? $tile->id : null;
 
         // Авто-победа для бота
-        if (!$p->isHuman && $this->checker->canWin($p->hand, $p->melds)) {
-            if ($this->ai->wantsWin($p, true, $p->seatWind, $this->roundWind)) {
-                $this->declareWin($this->currentPlayer, true);
-            }
+        if (!$p->isHuman && $this->mayWin($p, true) && $this->ai->wantsWin($p, true, $p->seatWind, $this->roundWind)) {
+            $this->declareWin($this->currentPlayer, true);
         }
 
         return $tile;
+    }
+
+    /** Подсчёт руки с учётом режима минимума фанов. */
+    public function scoreHand(Player $pl, bool $selfDraw): array
+    {
+        return $this->scorer->score(
+            $pl->hand,
+            $pl->melds,
+            $pl->seatWind,
+            $this->roundWind,
+            $selfDraw,
+            $pl->isDealer,
+            !$this->requireMinFan // 無花 только в свободном режиме
+        );
+    }
+
+    /** Можно ли объявить победу в текущем режиме. */
+    public function mayWin(Player $pl, bool $selfDraw): bool
+    {
+        if (!$this->checker->canWin($pl->hand, $pl->melds)) {
+            return false;
+        }
+        if (!$this->requireMinFan) {
+            return true;
+        }
+        $score = $this->scoreHand($pl, $selfDraw);
+        return $score['fan'] >= Scorer::MIN_FAN;
+    }
+
+    /** Победа со сброса: временно добавляем плитку в руку для проверки. */
+    public function mayWinOnDiscard(Player $pl, Tile $discard): bool
+    {
+        $pl->addTile($discard);
+        $ok = $this->mayWin($pl, false);
+        $pl->removeTileById($discard->id);
+        return $ok;
     }
 
     /** Вставить добранную плитку в общую руку (только UI-состояние). */
@@ -249,6 +288,9 @@ class Game
 
             // Для человека всегда показываем опции; для бота — фильтр
             if ($pl->isHuman) {
+                if ($opts['win'] && !$this->mayWinOnDiscard($pl, $tile)) {
+                    $opts['win'] = false;
+                }
                 if ($opts['win'] || $opts['kong'] || $opts['pung'] || $opts['chow']) {
                     $this->claimOptions[$pid] = $opts;
                     if ($opts['win']) {
@@ -267,7 +309,10 @@ class Game
                 $this->claimOptions[$pid] = $opts;
                 $this->claimOptions[$pid]['aiAction'] = $decision;
                 if ($decision['action'] === 'win') {
-                    $wins[] = $pid;
+                    // В режиме min-fan бот не заявляет ху без достаточных фанов
+                    if ($this->mayWinOnDiscard($pl, $tile)) {
+                        $wins[] = $pid;
+                    }
                 } elseif (in_array($decision['action'], ['kong', 'pung'], true)) {
                     $pungs[] = $pid;
                 } elseif ($decision['action'] === 'chow') {
@@ -362,6 +407,15 @@ class Game
                 return ['ok' => false, 'error' => 'Нельзя выиграть'];
             }
             $pl->addTile($discard);
+            if (!$this->mayWin($pl, false)) {
+                $pl->removeTileById($discard->id);
+                return [
+                    'ok' => false,
+                    'error' => $this->requireMinFan
+                        ? 'Нужно минимум ' . Scorer::MIN_FAN . ' фана'
+                        : 'Нельзя выиграть',
+                ];
+            }
             // убрать из дискардов предыдущего
             $this->takeLastDiscardFromRiver();
             $this->declareWin($playerId, false);
@@ -531,9 +585,9 @@ class Game
             }
         }
 
-        if ($this->phase === self::PHASE_DISCARD) {
+            if ($this->phase === self::PHASE_DISCARD) {
             $p = $this->players[$this->currentPlayer];
-            if ($this->checker->canWin($p->hand, $p->melds) && $this->ai->wantsWin($p, true, $p->seatWind, $this->roundWind)) {
+            if ($this->mayWin($p, true) && $this->ai->wantsWin($p, true, $p->seatWind, $this->roundWind)) {
                 $this->declareWin($this->currentPlayer, true);
                 return;
             }
@@ -561,16 +615,9 @@ class Game
     public function declareWin(int $playerId, bool $selfDraw): void
     {
         $pl = $this->players[$playerId];
-        $score = $this->scorer->score(
-            $pl->hand,
-            $pl->melds,
-            $pl->seatWind,
-            $this->roundWind,
-            $selfDraw,
-            $pl->isDealer
-        );
+        $score = $this->scoreHand($pl, $selfDraw);
 
-        // Если мало фан — всё равно засчитываем с пометкой (для playability)
+        // Свободный режим: победа даже при малом числе фанов
         $fan = max($score['fan'], 1);
         $base = 2 ** min($fan, 8);
 
@@ -639,6 +686,9 @@ class Game
         if (!$this->checker->canWin($p->hand, $p->melds)) {
             return ['ok' => false, 'error' => 'Рука не выигрышная'];
         }
+        if ($this->requireMinFan && !$this->mayWin($p, true)) {
+            return ['ok' => false, 'error' => 'Нужно минимум ' . Scorer::MIN_FAN . ' фана'];
+        }
         $this->declareWin(0, true);
         return ['ok' => true];
     }
@@ -655,7 +705,7 @@ class Game
         $canWin = $human
             && $this->phase === self::PHASE_DISCARD
             && $this->currentPlayer === 0
-            && $this->checker->canWin($human->hand, $human->melds);
+            && $this->mayWin($human, true);
 
         $ended = $this->phase === self::PHASE_ENDED;
 
@@ -664,6 +714,8 @@ class Game
             'currentPlayer' => $this->currentPlayer,
             'dealer' => $this->dealer,
             'roundWind' => $this->roundWind,
+            'requireMinFan' => $this->requireMinFan,
+            'winMode' => $this->requireMinFan ? 'min3' : 'any',
             'wallRemaining' => max(0, $this->deck->remaining() - $this->wallDead),
             // Сколько плиток ещё в стене (рубашки); лица — только после конца раздачи
             'wallCount' => $this->deck->remaining(),
@@ -708,6 +760,7 @@ class Game
             'result' => $this->result,
             'wallDead' => $this->wallDead,
             'pendingDrawnId' => $this->pendingDrawnId,
+            'requireMinFan' => $this->requireMinFan,
         ];
     }
 
@@ -730,6 +783,7 @@ class Game
         $g->result = $data['result'] ?? null;
         $g->wallDead = (int)($data['wallDead'] ?? 14);
         $g->pendingDrawnId = isset($data['pendingDrawnId']) ? ($data['pendingDrawnId'] !== null ? (int)$data['pendingDrawnId'] : null) : null;
+        $g->requireMinFan = (bool)($data['requireMinFan'] ?? false);
         return $g;
     }
 }

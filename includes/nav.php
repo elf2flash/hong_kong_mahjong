@@ -8,8 +8,25 @@ $navCurrent = $navCurrent ?? 'game';
   </a>
 
   <ul class="nav-list">
-    <li class="nav-item <?= $navCurrent === 'game' ? 'is-active' : '' ?>">
-      <a href="index.php">Игра</a>
+    <li class="nav-item has-submenu <?= $navCurrent === 'game' ? 'is-active' : '' ?>">
+      <button type="button" class="nav-trigger" aria-expanded="false" aria-haspopup="true">
+        Игра
+        <span class="nav-chevron" aria-hidden="true">▾</span>
+      </button>
+      <ul class="nav-submenu nav-submenu-wide" role="menu">
+        <li role="none">
+          <button type="button" class="nav-mode" role="menuitem" data-win-mode="any">
+            <span class="nav-mode-check" aria-hidden="true">✓</span>
+            Победа без ограничения по фанам
+          </button>
+        </li>
+        <li role="none">
+          <button type="button" class="nav-mode" role="menuitem" data-win-mode="min3">
+            <span class="nav-mode-check" aria-hidden="true">✓</span>
+            Победа минимум 3 фана
+          </button>
+        </li>
+      </ul>
     </li>
     <li class="nav-item has-submenu <?= $navCurrent === 'help' ? 'is-active' : '' ?>">
       <button type="button" class="nav-trigger" aria-expanded="false" aria-haspopup="true">
