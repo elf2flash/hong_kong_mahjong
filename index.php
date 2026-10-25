@@ -78,6 +78,11 @@ $navCurrent = 'game';
       </div>
 
       <div class="seat seat-bottom" data-seat="0">
+        <div class="seat-info">
+          <span class="seat-name"></span>
+          <span class="seat-score"></span>
+          <button type="button" id="btnWin" class="btn btn-win hidden">自摸 Выиграть</button>
+        </div>
         <div class="seat-row">
           <div class="meld-field">
             <span class="hand-field-label">Комбинации</span>
@@ -88,10 +93,9 @@ $navCurrent = 'game';
             <div class="hand player-hand" id="playerHand"></div>
           </div>
         </div>
-        <div class="seat-info">
-          <span class="seat-name"></span>
-          <span class="seat-score"></span>
-          <button type="button" id="btnWin" class="btn btn-win hidden">自摸 Выиграть</button>
+        <div id="wallField" class="wall-field hidden">
+          <span class="hand-field-label">Остатки стены</span>
+          <div class="wall-tiles" id="wallTiles"></div>
         </div>
       </div>
     </main>

@@ -61,7 +61,9 @@ body {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
   padding: 0.75rem 1.25rem;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.35), transparent);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -443,6 +445,39 @@ body {
   width: calc(10 * 48px * var(--tile-scale) + 9 * var(--river-gap));
   height: calc(7 * 66px * var(--tile-scale) + 6 * var(--river-gap));
   max-width: none;
+}
+
+.seat-bottom .wall-field {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0.85rem auto 0;
+  padding: 1.1rem 0.9rem 0.75rem;
+  border: 2px solid rgba(212, 160, 23, 0.4);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
+}
+
+.wall-field.hidden {
+  display: none !important;
+}
+
+.wall-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-start;
+  align-content: flex-start;
+  max-height: calc(3 * var(--tile-h) + 2 * 4px);
+  overflow: auto;
+}
+
+.wall-tiles .tile {
+  width: var(--tile-w);
+  height: var(--tile-h);
+  flex: 0 0 auto;
 }
 
 .hand-field-label {
@@ -985,15 +1020,15 @@ body.dragging-tile .discard-field-center {
 
 /* ——— Menu ——— */
 .topbar-nav {
-  gap: 1rem;
-  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
 }
 
 .main-nav {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  flex: 1;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  flex: 0 1 auto;
   min-width: 0;
 }
 

@@ -58,7 +58,13 @@ class Game
             }
         }
 
-        $names = ['Вы', 'Бот Юг', 'Бот Запад', 'Бот Север'];
+        // Позиции за столом: Восток / Юг / Запад / Север
+        $names = [
+            'Вы (East) 東',
+            'Бот Юг (South) 南',
+            'Бот Запад (West) 西',
+            'Бот Север (North) 北',
+        ];
         $this->players = [];
         for ($i = 0; $i < 4; $i++) {
             $wind = (($i - $this->dealer + 4) % 4) + 1;
@@ -614,12 +620,16 @@ class Game
             && $this->currentPlayer === 0
             && $this->checker->canWin($human->hand, $human->melds);
 
+        $ended = $this->phase === self::PHASE_ENDED;
+
         return [
             'phase' => $this->phase,
             'currentPlayer' => $this->currentPlayer,
             'dealer' => $this->dealer,
             'roundWind' => $this->roundWind,
             'wallRemaining' => max(0, $this->deck->remaining() - $this->wallDead),
+            // Остаток стены (включая мёртвую) — только после конца раздачи
+            'wallTiles' => $ended ? $this->deck->toArray() : null,
             'lastDiscard' => $this->lastDiscard?->jsonSerialize(),
             'lastDiscardPlayer' => $this->lastDiscardPlayer,
             'river' => $this->river,
@@ -630,7 +640,7 @@ class Game
                 ? $this->pendingDrawnId
                 : null,
             'players' => array_map(
-                fn(Player $p) => $p->toPublicArray($p->isHuman || $this->phase === self::PHASE_ENDED),
+                fn(Player $p) => $p->toPublicArray($p->isHuman || $ended),
                 $this->players
             ),
             'log' => $this->log,

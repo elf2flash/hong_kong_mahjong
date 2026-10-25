@@ -236,6 +236,20 @@
     });
   }
 
+  function renderWall() {
+    const field = document.getElementById('wallField');
+    const el = document.getElementById('wallTiles');
+    if (!field || !el) return;
+    clear(el);
+    const tiles = state.phase === 'ended' && Array.isArray(state.wallTiles) ? state.wallTiles : null;
+    if (!tiles || !tiles.length) {
+      field.classList.add('hidden');
+      return;
+    }
+    field.classList.remove('hidden');
+    tiles.forEach((t) => el.appendChild(tileEl(t)));
+  }
+
   function renderSeat(seatEl, player, isCurrent) {
     const winnerId = state.result && state.result.winner != null ? state.result.winner : null;
     const isWinner = winnerId === player.id;
@@ -376,6 +390,7 @@
     });
 
     renderRiver();
+    renderWall();
 
     const claimPanel = document.getElementById('claimPanel');
     clear(claimPanel);
