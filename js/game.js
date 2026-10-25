@@ -250,8 +250,19 @@
     const ended = state.phase === 'ended';
     const openTiles = ended && Array.isArray(state.wallTiles) ? state.wallTiles : null;
 
+    // Во время партии — только рубашки (лица не раскрываем)
+    const closedCount = Math.max(0, Number(state.wallCount ?? state.wallRemaining) || 0);
+    const openCount = openTiles ? openTiles.length : 0;
+    const dead = state.wallDead ?? 14;
+
     if (label) {
-      label.textContent = ended ? 'Остатки стены' : 'Стена';
+      if (ended && state.result?.draw) {
+        label.textContent = `Мёртвая стена (${openCount || dead})`;
+      } else if (ended) {
+        label.textContent = `Остаток стены (${openCount})`;
+      } else {
+        label.textContent = `Стена (${closedCount})`;
+      }
     }
 
     if (openTiles) {
@@ -259,9 +270,7 @@
       return;
     }
 
-    // Во время партии — только рубашки (лица не раскрываем)
-    const n = Math.max(0, Number(state.wallCount ?? state.wallRemaining) || 0);
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < closedCount; i++) {
       el.appendChild(tileEl(null, { back: true }));
     }
   }

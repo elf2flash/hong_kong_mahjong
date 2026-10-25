@@ -94,7 +94,7 @@ $navCurrent = 'game';
           </div>
         </div>
         <div id="wallField" class="wall-field">
-          <span class="hand-field-label" id="wallFieldLabel">Стена</span>
+          <span class="hand-field-label" id="wallFieldLabel">Стена (0)</span>
           <div class="wall-tiles" id="wallTiles"></div>
         </div>
       </div>

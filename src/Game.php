@@ -671,9 +671,9 @@ class Game
             'winner' => null,
             'winnerName' => null,
             'draw' => true,
-            'message' => 'Ничья — стена закончилась (повтор, дилер тот же)',
+            'message' => 'Ничья — мёртвая стена (' . $this->wallDead . ')',
         ];
-        $this->addLog('Ничья (стена закончилась) — дилер не меняется');
+        $this->addLog('Ничья — мёртвая стена (' . $this->wallDead . '), дилер не меняется');
         // Повтор раздачи: дилер остаётся
     }
 
@@ -719,6 +719,7 @@ class Game
             'wallRemaining' => max(0, $this->deck->remaining() - $this->wallDead),
             // Сколько плиток ещё в стене (рубашки); лица — только после конца раздачи
             'wallCount' => $this->deck->remaining(),
+            'wallDead' => $this->wallDead,
             'wallTiles' => $ended ? $this->deck->toArray() : null,
             'lastDiscard' => $this->lastDiscard?->jsonSerialize(),
             'lastDiscardPlayer' => $this->lastDiscardPlayer,
