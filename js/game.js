@@ -15,14 +15,25 @@
   let thinkingSeat = null;
   /** @type {{ playerId: number, text: string } | null} */
   let claimAnnounce = null;
+  /** Пока true, render() не имеет права стереть надпись Чоу!/Понг!/Конг! */
+  let announceLock = false;
   let botLoopGen = 0;
 
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  /** Единая длительность: и «бот думает», и надпись Чоу!/Понг!/Конг!. */
   function botDelayMs() {
-    return window.MahjongSettings?.getBotDelayMs?.() ?? 300;
+    const sec = window.MahjongSettings?.getBotDelaySec?.();
+    if (Number.isFinite(sec) && sec >= 0) {
+      return Math.round(sec * 1000);
+    }
+    const ms = window.MahjongSettings?.getBotDelayMs?.();
+    if (Number.isFinite(ms) && ms >= 0) {
+      return Math.round(ms);
+    }
+    return 300;
   }
 
   function needsBot() {
@@ -33,58 +44,137 @@
     return busy || botsRunning;
   }
 
+  function paintFrame() {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+  }
+
+  function clearAllAnnounces() {
+    claimAnnounce = null;
+    announceLock = false;
+    document.querySelectorAll('.seat-announce').forEach((el) => {
+      el.textContent = '';
+      el.classList.remove('is-visible');
+    });
+  }
+
+  function normalizeAnnounce(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    if (raw.playerId === undefined || raw.playerId === null) return null;
+    const text = raw.text != null ? String(raw.text).trim() : '';
+    if (!text) return null;
+    return { playerId: Number(raw.playerId), text };
+  }
+
+  /**
+   * Пауза той же длины, что и «бот думает».
+   * Надпись пишется в DOM и защищена announceLock от стирания в render().
+   */
+  async function holdClaimAnnounce(ann) {
+    const normalized = normalizeAnnounce(ann);
+    if (!normalized) return false;
+
+    const ms = botDelayMs();
+    claimAnnounce = normalized;
+    announceLock = true;
+    thinkingSeat = null;
+
+    const el = document.querySelector(
+      `.seat[data-seat="${normalized.playerId}"] .seat-announce`
+    );
+    if (el) {
+      el.textContent = normalized.text;
+      el.classList.add('is-visible');
+    }
+    render();
+    await paintFrame();
+    if (ms > 0) {
+      await sleep(ms);
+    }
+
+    if (el) {
+      el.textContent = '';
+      el.classList.remove('is-visible');
+    }
+    claimAnnounce = null;
+    announceLock = false;
+    return true;
+  }
+
+  /**
+   * Цикл ботов:
+   * 1) пауза botDelayMs — подсветка «думает»
+   * 2) botStep на сервере
+   * 3) если Чоу!/Понг!/Конг! — ещё одна пауза botDelayMs с надписью
+   */
   async function runBotLoop() {
+    if (botsRunning) return;
     const gen = ++botLoopGen;
     botsRunning = true;
     try {
       while (needsBot() && gen === botLoopGen) {
-        claimAnnounce = null;
-        thinkingSeat = state.botActorId != null ? state.botActorId : state.currentPlayer;
+        // --- 1. Пауза перед ходом (думает) ---
+        clearAllAnnounces();
+        thinkingSeat =
+          state.botActorId != null ? state.botActorId : state.currentPlayer;
         render();
-        const ms = botDelayMs();
-        if (ms > 0) {
-          await sleep(ms);
+        const thinkMs = botDelayMs();
+        if (thinkMs > 0) {
+          await sleep(thinkMs);
         }
         if (gen !== botLoopGen) return;
+
+        // --- 2. Ход ---
+        let stepAnnounce = null;
         try {
           const data = await api('botStep');
           if (data.state) state = data.state;
+          stepAnnounce = normalizeAnnounce(
+            data.claimAnnounce ?? data.announce ?? data.state?.announce ?? null
+          );
         } catch (e) {
           console.error(e);
           break;
         }
         thinkingSeat = null;
 
-        // После Чоу/Понг/Конг — показать надпись ещё на время хода бота
-        const ann = state.announce;
-        if (ann && ann.text && ann.playerId != null) {
-          claimAnnounce = { playerId: ann.playerId, text: ann.text };
+        if (gen !== botLoopGen) return;
+
+        // --- 3. Пауза надписи (та же длительность, что и п.1) ---
+        if (stepAnnounce) {
+          await holdClaimAnnounce(stepAnnounce);
+        } else {
           render();
-          if (ms > 0) {
-            await sleep(ms);
-          }
-          if (gen !== botLoopGen) return;
-          claimAnnounce = null;
         }
-        render();
+        if (gen !== botLoopGen) return;
       }
     } finally {
       if (gen === botLoopGen) {
         thinkingSeat = null;
-        claimAnnounce = null;
+        clearAllAnnounces();
         botsRunning = false;
       }
     }
   }
 
   async function applyState(data) {
-    if (data && data.state) state = data.state;
-    thinkingSeat = null;
+    if (data && data.state) {
+      // Во время цикла ботов не затираем announce и не перезапускаем паузы
+      const prevAnnounce = state?.announce;
+      state = data.state;
+      if (botsRunning && prevAnnounce && !state.announce) {
+        state.announce = prevAnnounce;
+      }
+    }
+    if (!botsRunning) {
+      thinkingSeat = null;
+    }
     if (state?.winMode && window.MahjongSettings?.syncWinModeUI) {
       window.MahjongSettings.syncWinModeUI(state.winMode);
     }
     render();
-    if (needsBot()) {
+    if (needsBot() && !botsRunning) {
       await runBotLoop();
     }
   }
@@ -302,9 +392,21 @@
 
     const annEl = seatEl.querySelector('.seat-announce');
     if (annEl) {
-      const show = !!(claimAnnounce && claimAnnounce.playerId === player.id && claimAnnounce.text);
-      annEl.textContent = show ? claimAnnounce.text : '';
-      annEl.classList.toggle('is-visible', show);
+      const show = !!(
+        claimAnnounce &&
+        claimAnnounce.text &&
+        Number(claimAnnounce.playerId) === Number(player.id)
+      );
+      if (announceLock) {
+        // Не даём render стереть чужую/свою надпись во время паузы
+        if (show) {
+          annEl.textContent = claimAnnounce.text;
+          annEl.classList.add('is-visible');
+        }
+      } else {
+        annEl.textContent = show ? claimAnnounce.text : '';
+        annEl.classList.toggle('is-visible', show);
+      }
     }
 
     const meldsEl = seatEl.querySelector('.melds');
@@ -620,7 +722,22 @@
   window.MahjongGame = {
     onWinModeChanged(nextState) {
       if (!nextState) return;
-      applyState({ state: nextState });
+      // Мягко: режим победы без перезапуска цикла ботов
+      if (state) {
+        state.requireMinFan = !!nextState.requireMinFan;
+        state.winMode = nextState.winMode || (nextState.requireMinFan ? 'min3' : 'any');
+      } else {
+        state = nextState;
+      }
+      if (window.MahjongSettings?.syncWinModeUI) {
+        window.MahjongSettings.syncWinModeUI(state.winMode);
+      }
+      const hint = document.querySelector('.log-panel .hint');
+      if (hint) {
+        hint.textContent = state.requireMinFan
+          ? 'Минимум 3 фана · Чоу / Понг / Конг / Махджонг'
+          : 'Без ограничения по фанам · Чоу / Понг / Конг / Махджонг';
+      }
     },
   };
 

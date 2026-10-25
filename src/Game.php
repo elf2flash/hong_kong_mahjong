@@ -381,9 +381,10 @@ class Game
             return;
         }
 
-        $this->applyClaim($pid, $action, (int)($decision['chowOption'] ?? 0));
+        $res = $this->applyClaim($pid, $action, (int)($decision['chowOption'] ?? 0));
 
-        if (in_array($action, ['chow', 'pung', 'kong'], true)) {
+        // Надпись только после успешного клейма — клиент держит её botDelayMs
+        if (!empty($res['ok']) && in_array($action, ['chow', 'pung', 'kong'], true)) {
             $this->announce = [
                 'playerId' => $pid,
                 'text' => match ($action) {

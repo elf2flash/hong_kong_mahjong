@@ -274,20 +274,23 @@ body {
 
 .seat-announce {
   display: none;
-  margin-left: 0.15rem;
-  padding: 0.12rem 0.45rem;
+  margin-left: 0.25rem;
+  padding: 0.2rem 0.55rem;
   border-radius: 6px;
-  background: rgba(212, 160, 23, 0.28);
-  border: 1px solid rgba(212, 160, 23, 0.75);
-  color: #ffe08a;
+  background: #d4a017;
+  border: 1px solid #f0d060;
+  color: #1a120b;
   font-weight: 800;
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   letter-spacing: 0.04em;
-  animation: fade-up 0.18s ease;
+  line-height: 1.2;
+  white-space: nowrap;
+  z-index: 5;
 }
 
 .seat-announce.is-visible {
   display: inline-flex;
+  align-items: center;
 }
 
 .center {

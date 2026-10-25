@@ -68,11 +68,18 @@ try {
             break;
 
         case 'botStep':
+            $claimAnnounce = null;
             if ($game->isAwaitingBot()) {
                 $game->processBotTurn();
+                // Явно отдаём надпись этого шага (state.announce тоже есть)
+                $claimAnnounce = $game->announce;
                 saveGame($game);
             }
-            respond($game);
+            respond($game, [
+                'claimAnnounce' => $claimAnnounce,
+                // Дублируем на корне, чтобы клиент не зависел от state
+                'announce' => $claimAnnounce,
+            ]);
             break;
 
         case 'discard':

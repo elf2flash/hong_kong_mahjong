@@ -71,7 +71,7 @@
     });
   }
 
-  async function setWinMode(mode) {
+  async function setWinMode(mode, { syncOnly = false } = {}) {
     const next = mode === 'min3' ? 'min3' : 'any';
     syncWinModeUI(next);
     persist(WIN_MODE_KEY, next);
@@ -82,8 +82,11 @@
         body: JSON.stringify({ action: 'setWinMode', mode: next }),
       });
       const data = await res.json();
-      if (data.state && window.MahjongGame?.onWinModeChanged) {
+      // Не перезапускаем партию/ботов — только режим и галочку в меню
+      if (!syncOnly && data.state && window.MahjongGame?.onWinModeChanged) {
         window.MahjongGame.onWinModeChanged(data.state);
+      } else if (data.winMode) {
+        syncWinModeUI(data.winMode);
       }
     } catch (e) {
       console.error(e);
@@ -157,8 +160,8 @@
   applyScale(scale);
   applyDelay(botDelay);
   syncWinModeUI(winMode);
-  // Синхронизировать режим с сервером при загрузке страницы
-  setWinMode(winMode);
+  // При загрузке только синхронизируем сервер, без перезапуска UI-партии
+  setWinMode(winMode, { syncOnly: true });
 
   // Делегирование: работает даже если кнопки в выпадающем меню
   document.addEventListener('click', onSettingsClick, true);
