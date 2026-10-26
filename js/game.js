@@ -719,6 +719,25 @@
   document.getElementById('btnNew').addEventListener('click', () => newGame(false));
   document.getElementById('btnWin').addEventListener('click', doWin);
 
+  (function initLogToggle() {
+    const panel = document.getElementById('logPanel');
+    const btn = document.getElementById('btnLogToggle');
+    const body = document.getElementById('logBody');
+    const app = document.querySelector('.app');
+    if (!panel || !btn || !body) return;
+
+    function setOpen(open) {
+      panel.classList.toggle('is-collapsed', !open);
+      if (app) app.classList.toggle('log-collapsed', !open);
+      body.hidden = !open;
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    btn.addEventListener('click', () => {
+      setOpen(panel.classList.contains('is-collapsed'));
+    });
+  })();
+
   window.MahjongGame = {
     onWinModeChanged(nextState) {
       if (!nextState) return;

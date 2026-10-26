@@ -970,19 +970,68 @@ body.dragging-tile .discard-field-center {
 }
 
 .log-panel {
-  padding: 1rem;
+  padding: 0.65rem 0.85rem 1rem;
   background: rgba(0, 0, 0, 0.35);
   border-left: 1px solid rgba(255, 255, 255, 0.08);
   overflow: auto;
+  min-width: 0;
 }
 
-.log-panel h2 {
-  margin: 0 0 0.75rem;
+.log-panel.is-collapsed {
+  padding: 0.5rem 0.65rem;
+  overflow: hidden;
+}
+
+.app.log-collapsed {
+  grid-template-columns: 1fr auto;
+}
+
+.log-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.15rem 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
   font-size: 0.85rem;
+  font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.log-toggle:hover {
+  color: var(--gold);
+}
+
+.log-toggle-label {
+  white-space: nowrap;
+}
+
+.log-chevron {
+  display: inline-block;
+  font-size: 0.75rem;
+  line-height: 1;
+  transition: transform 0.18s ease;
+  transform: rotate(-90deg);
+}
+
+.log-panel:not(.is-collapsed) .log-chevron {
+  transform: rotate(0deg);
+}
+
+.log-body {
+  margin-top: 0.75rem;
+}
+
+.log-body[hidden] {
+  display: none !important;
 }
 
 #log {
@@ -1012,10 +1061,18 @@ body.dragging-tile .discard-field-center {
     grid-template-rows: auto 1fr auto;
   }
 
+  .app.log-collapsed {
+    grid-template-columns: 1fr;
+  }
+
   .log-panel {
     border-left: none;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    max-height: 140px;
+    max-height: none;
+  }
+
+  .log-panel:not(.is-collapsed) {
+    max-height: 180px;
   }
 
   .mid-row {

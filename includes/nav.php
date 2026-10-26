@@ -8,7 +8,8 @@ $navCurrent = $navCurrent ?? 'game';
   </a>
 
   <ul class="nav-list">
-    <li class="nav-item has-submenu <?= $navCurrent === 'game' ? 'is-active' : '' ?>">
+    <?php if ($navCurrent === 'game'): ?>
+    <li class="nav-item has-submenu is-active" data-nav="game">
       <button type="button" class="nav-trigger" aria-expanded="false" aria-haspopup="true">
         Игра
         <span class="nav-chevron" aria-hidden="true">▾</span>
@@ -28,6 +29,11 @@ $navCurrent = $navCurrent ?? 'game';
         </li>
       </ul>
     </li>
+    <?php else: ?>
+    <li class="nav-item" data-nav="game">
+      <a href="index.php">Игра</a>
+    </li>
+    <?php endif; ?>
     <li class="nav-item has-submenu <?= $navCurrent === 'help' ? 'is-active' : '' ?>">
       <button type="button" class="nav-trigger" aria-expanded="false" aria-haspopup="true">
         Help

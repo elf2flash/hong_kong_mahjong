@@ -14,7 +14,7 @@ $navCurrent = 'game';
   <link rel="stylesheet" href="css/style.css?v=<?= filemtime(__DIR__ . '/css/style.css') ?>">
 </head>
 <body>
-  <div class="app">
+  <div class="app log-collapsed">
     <header class="topbar topbar-nav">
       <?php require __DIR__ . '/includes/nav.php'; ?>
       <div class="meta">
@@ -101,10 +101,15 @@ $navCurrent = 'game';
       </div>
     </main>
 
-    <aside class="log-panel">
-      <h2>Журнал</h2>
-      <ul id="log"></ul>
-      <p class="hint">Без ограничения по фанам · Чоу / Понг / Конг / Махджонг</p>
+    <aside class="log-panel is-collapsed" id="logPanel">
+      <button type="button" class="log-toggle" id="btnLogToggle" aria-expanded="false" aria-controls="logBody">
+        <span class="log-toggle-label">Журнал</span>
+        <span class="log-chevron" aria-hidden="true">▾</span>
+      </button>
+      <div class="log-body" id="logBody" hidden>
+        <ul id="log"></ul>
+        <p class="hint">Без ограничения по фанам · Чоу / Понг / Конг / Махджонг</p>
+      </div>
     </aside>
   </div>
   <script src="js/tiles.js?v=<?= filemtime(__DIR__ . '/js/tiles.js') ?>"></script>
