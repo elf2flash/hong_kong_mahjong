@@ -69,13 +69,7 @@ class WinChecker
         $counts = array_filter($counts, fn($c) => $c > 0);
         ksort($counts);
 
-        if ($needMelds === 0) {
-            if ($pair !== null && array_sum($counts) === 0) {
-                $results[] = ['pair' => $pair, 'melds' => $formed];
-            }
-            return;
-        }
-
+        // Сначала пара: иначе при 4 открытых мельдах (needMelds=0) победа на пару не находится
         if ($pair === null) {
             foreach ($counts as $key => $cnt) {
                 if ($cnt >= 2) {
@@ -86,6 +80,13 @@ class WinChecker
                         return;
                     }
                 }
+            }
+            return;
+        }
+
+        if ($needMelds === 0) {
+            if (array_sum($counts) === 0) {
+                $results[] = ['pair' => $pair, 'melds' => $formed];
             }
             return;
         }
