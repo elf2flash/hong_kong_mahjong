@@ -40,6 +40,9 @@ $navCurrent = $navCurrent ?? 'game';
         <li role="none">
           <a role="menuitem" href="tiles.php#rules">Краткие правила</a>
         </li>
+        <li role="none">
+          <a role="menuitem" href="tiles.php#fans">Фаны (очки)</a>
+        </li>
       </ul>
     </li>
     <li class="nav-item has-submenu <?= $navCurrent === 'settings' ? 'is-active' : '' ?>">
