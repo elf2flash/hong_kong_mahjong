@@ -154,6 +154,9 @@
         thinkingSeat = null;
         clearAllAnnounces();
         botsRunning = false;
+        // Важно: перерисовать уже без блокировки ввода —
+        // иначе фаза клейма человека остаётся «мёртвой» (нет подсказки и клика по сбросу)
+        render();
       }
     }
   }
@@ -179,7 +182,7 @@
     }
   }
 
-  /** @type {{ tileId: number, source: HTMLElement, ghost: HTMLElement | null, startX: number, startY: number, moved: boolean } | null} */
+  /** @type {{ tileId: number, source: HTMLElement, ghost: HTMLElement | null, startX: number, startY: number, moved: boolean, pointerId?: number } | null} */
   let drag = null;
 
   function isDiscardTurn() {
@@ -194,11 +197,24 @@
     return document.querySelector('.discard-field-center');
   }
 
+  function pointInRect(x, y, el) {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
+
   function endDrag(dropped) {
     const zone = getDiscardZone();
     if (zone) zone.classList.remove('discard-drop-hover');
     document.body.classList.remove('dragging-tile');
     if (drag?.ghost) drag.ghost.remove();
+    if (drag?.source && drag.pointerId != null) {
+      try {
+        drag.source.releasePointerCapture(drag.pointerId);
+      } catch (_) {
+        /* ignore */
+      }
+    }
     document.querySelectorAll('.player-hand .tile.tile-dragging').forEach((t) => {
       t.classList.remove('tile-dragging');
     });
@@ -231,10 +247,7 @@
     drag.ghost.style.transform = `translate(${e.clientX - drag.ghost.offsetWidth / 2}px, ${e.clientY - drag.ghost.offsetHeight / 2}px)`;
     const zone = getDiscardZone();
     if (zone) {
-      const r = zone.getBoundingClientRect();
-      const over =
-        e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-      zone.classList.toggle('discard-drop-hover', over);
+      zone.classList.toggle('discard-drop-hover', pointInRect(e.clientX, e.clientY, zone));
     }
   }
 
@@ -246,14 +259,8 @@
 
     let dropped = false;
     if (drag.moved) {
-      const zone = getDiscardZone();
-      if (zone) {
-        const r = zone.getBoundingClientRect();
-        dropped =
-          e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-      }
+      dropped = pointInRect(e.clientX, e.clientY, getDiscardZone());
     } else {
-      // короткий клик — только выделение
       selectedId = drag.tileId;
       document.querySelectorAll('.player-hand .tile.selected').forEach((t) => t.classList.remove('selected'));
       const src = document.querySelector(`.player-hand .tile[data-id="${drag.tileId}"]`);
@@ -263,13 +270,10 @@
   }
 
   function makeDiscardable(el, tileId) {
-    // SVG внутри не должен перехватывать pointer
     el.querySelectorAll('svg, svg *').forEach((n) => {
       n.style.pointerEvents = 'none';
     });
 
-    // Вешаем обработчики по фазе хода, без учёта busy —
-    // иначе после insertDrawn/claim render() при busy=true оставляет плитки «мёртвыми».
     if (!isDiscardTurn()) {
       el.classList.remove('tile-draggable');
       el.style.touchAction = '';
@@ -281,11 +285,9 @@
     el.title = (el.title ? el.title + ' · ' : '') + 'Перетащите на «Сбросы»';
 
     el.addEventListener('pointerdown', (e) => {
-      if (!canDiscardNow() || e.button !== 0) return;
-      if (drag) return;
+      if (!canDiscardNow() || e.button !== 0 || drag) return;
       e.preventDefault();
       selectedId = tileId;
-
       drag = {
         tileId,
         source: el,
@@ -293,8 +295,13 @@
         startX: e.clientX,
         startY: e.clientY,
         moved: false,
+        pointerId: e.pointerId,
       };
-
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch (_) {
+        /* ignore */
+      }
       window.addEventListener('pointermove', onPointerMove);
       window.addEventListener('pointerup', onPointerUp);
       window.addEventListener('pointercancel', onPointerUp);
@@ -338,7 +345,7 @@
     river.forEach((entry) => {
       const tile = entry.tile || entry;
       const node = tileEl(tile);
-      if (lastId != null && tile.id === lastId) {
+      if (lastId != null && Number(tile.id) === Number(lastId)) {
         node.classList.add('tile-last-discard');
       }
       el.appendChild(node);
