@@ -53,8 +53,14 @@ class AI
      *
      * @return array{action: string, chowOption?: int}
      */
-    public function chooseClaim(Player $player, Tile $discard, array $options, int $seatWind, int $roundWind): array
-    {
+    public function chooseClaim(
+        Player $player,
+        Tile $discard,
+        array $options,
+        int $seatWind,
+        int $roundWind,
+        bool $requireMinFan = false
+    ): array {
         if (!empty($options['win'])) {
             $score = $this->scorer->score(
                 [...$player->hand, $discard],
@@ -62,7 +68,8 @@ class AI
                 $seatWind,
                 $roundWind,
                 false,
-                $player->isDealer
+                $player->isDealer,
+                !$requireMinFan
             );
             if ($score['valid'] || $score['fan'] >= 1) {
                 // AI takes win if at least 1 fan (lenient) or valid
@@ -84,19 +91,125 @@ class AI
             if ($discard->isHonor() || $discard->value === 1 || $discard->value === 9) {
                 return ['action' => 'pung'];
             }
-            // random-ish: pung if we have isolated tiles
-            if (mt_rand(0, 100) < 55) {
+            // В режиме min-3 фана понги берём гораздо чаще (путь к 對對胡 / фанам)
+            $pungChance = $requireMinFan ? 88 : 55;
+            if (mt_rand(0, 100) < $pungChance) {
                 return ['action' => 'pung'];
             }
         }
 
         if (!empty($options['chow']) && !empty($options['chowOptions'])) {
-            if (mt_rand(0, 100) < 40) {
+            if ($requireMinFan) {
+                // Обычный чоу почти не берём; только если ведёт к 混一色 (одна масть + гоноры)
+                $best = $this->bestHalfFlushChowOption($player, $discard, $options['chowOptions']);
+                if ($best !== null) {
+                    return ['action' => 'chow', 'chowOption' => $best];
+                }
+            } elseif (mt_rand(0, 100) < 40) {
                 return ['action' => 'chow', 'chowOption' => 0];
             }
         }
 
         return ['action' => 'pass'];
+    }
+
+    /**
+     * Чоу для пути к 混一色: не открываем вторую числовую масть в мельдах,
+     * и в руке эта масть уже преобладает (чужие можно потом сбросить).
+     *
+     * @param list<list<string>> $chowOptions
+     */
+    private function bestHalfFlushChowOption(Player $player, Tile $discard, array $chowOptions): ?int
+    {
+        if (!$discard->isSuit()) {
+            return null;
+        }
+
+        $openSuits = $this->openSuitedSuits($player);
+        // Уже две разные масти в открытых мельдах — 混一色 не светит
+        if (count($openSuits) >= 2) {
+            return null;
+        }
+        // Есть открытая масть — чоу только в ней
+        if (count($openSuits) === 1 && $openSuits[0] !== $discard->suit) {
+            return null;
+        }
+
+        $mainSuit = $discard->suit;
+        $bestIdx = null;
+        $bestScore = PHP_INT_MIN;
+
+        foreach ($chowOptions as $idx => $option) {
+            if (!is_array($option) || $option === []) {
+                continue;
+            }
+            // Все ключи варианта должны быть той же масти, что и сброс
+            $ok = true;
+            foreach ($option as $key) {
+                [$s] = explode('-', (string)$key);
+                if ($s !== $mainSuit) {
+                    $ok = false;
+                    break;
+                }
+            }
+            if (!$ok) {
+                continue;
+            }
+
+            $same = 0;
+            $foreign = 0;
+            $needFromHand = [];
+            foreach ($option as $key) {
+                if ($key === $discard->key()) {
+                    continue;
+                }
+                $needFromHand[$key] = ($needFromHand[$key] ?? 0) + 1;
+            }
+            $removed = $needFromHand;
+            foreach ($player->hand as $t) {
+                $k = $t->key();
+                if (($removed[$k] ?? 0) > 0) {
+                    $removed[$k]--;
+                    continue;
+                }
+                if (!$t->isSuit()) {
+                    continue;
+                }
+                if ($t->suit === $mainSuit) {
+                    $same++;
+                } else {
+                    $foreign++;
+                }
+            }
+
+            // Масть чоу должна явно преобладать в оставшейся руке
+            if ($same < $foreign || $same < 2) {
+                continue;
+            }
+
+            $score = $same * 3 - $foreign * 2;
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestIdx = (int)$idx;
+            }
+        }
+
+        return $bestIdx;
+    }
+
+    /** Числовые масти уже открытых мельдов. */
+    private function openSuitedSuits(Player $player): array
+    {
+        $suits = [];
+        foreach ($player->melds as $m) {
+            foreach ($m->tiles as $t) {
+                if ($t->isSuit()) {
+                    $suits[$t->suit] = true;
+                    break;
+                }
+            }
+        }
+        return array_keys($suits);
     }
 
     public function wantsWin(Player $player, bool $selfDraw, int $seatWind, int $roundWind): bool

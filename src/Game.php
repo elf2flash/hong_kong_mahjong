@@ -304,7 +304,14 @@ class Game
                     }
                 }
             } else {
-                $decision = $this->ai->chooseClaim($pl, $tile, $opts, $pl->seatWind, $this->roundWind);
+                $decision = $this->ai->chooseClaim(
+                    $pl,
+                    $tile,
+                    $opts,
+                    $pl->seatWind,
+                    $this->roundWind,
+                    $this->requireMinFan
+                );
                 if ($decision['action'] === 'pass') {
                     continue;
                 }
