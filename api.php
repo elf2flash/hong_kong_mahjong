@@ -131,6 +131,15 @@ try {
             );
             break;
 
+        case 'concealedKong':
+            $res = $game->declareConcealedKong(0);
+            saveGame($game);
+            echo json_encode(
+                ['ok' => $res['ok'], 'error' => $res['error'] ?? null, 'state' => $game->toClientState()],
+                JSON_UNESCAPED_UNICODE
+            );
+            break;
+
         default:
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => 'Unknown action'], JSON_UNESCAPED_UNICODE);

@@ -585,6 +585,31 @@
       pass.textContent = 'Пас';
       pass.addEventListener('click', () => doClaim('pass'));
       claimPanel.appendChild(pass);
+    } else if (
+      state.phase === 'discard' &&
+      state.currentPlayer === 0 &&
+      state.canConcealedKong &&
+      state.pendingDrawnId != null
+    ) {
+      claimPanel.classList.remove('hidden');
+      const tip = document.createElement('p');
+      tip.className = 'concealed-kong-tip';
+      tip.textContent = 'Добор замыкает четвёрку — закрытый конг?';
+      claimPanel.appendChild(tip);
+
+      const kongBtn = document.createElement('button');
+      kongBtn.type = 'button';
+      kongBtn.className = 'btn btn-claim';
+      kongBtn.textContent = '槓 Объявить закрытый конг';
+      kongBtn.addEventListener('click', () => doConcealedKong());
+      claimPanel.appendChild(kongBtn);
+
+      const keepBtn = document.createElement('button');
+      keepBtn.type = 'button';
+      keepBtn.className = 'btn btn-pass';
+      keepBtn.textContent = 'Оставить плитку на руках';
+      keepBtn.addEventListener('click', () => insertDrawn());
+      claimPanel.appendChild(keepBtn);
     } else {
       claimPanel.classList.add('hidden');
     }
@@ -673,6 +698,20 @@
       const data = await api('insertDrawn');
       if (!data.ok) {
         alert(data.error || 'Ошибка');
+      }
+      await applyState(data);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function doConcealedKong() {
+    if (isInputLocked() || !state?.canConcealedKong) return;
+    busy = true;
+    try {
+      const data = await api('concealedKong');
+      if (!data.ok) {
+        alert(data.error || 'Нельзя объявить конг');
       }
       await applyState(data);
     } finally {

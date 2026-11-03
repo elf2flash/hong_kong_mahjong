@@ -923,6 +923,15 @@ body.dragging-tile .discard-field-center {
   animation: fade-up 0.3s ease;
 }
 
+.concealed-kong-tip {
+  width: 100%;
+  margin: 0 0 0.15rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .claim-panel.hidden,
 .result-panel.hidden,
 .btn-win.hidden {

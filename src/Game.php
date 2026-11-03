@@ -241,6 +241,100 @@ class Game
         return ['ok' => true];
     }
 
+    /**
+     * Можно ли предложить закрытый конг после добора
+     * (в руке стало 4 одинаковых, добранная — одна из них).
+     */
+    public function canOfferConcealedKong(int $playerId = 0): bool
+    {
+        return $this->concealedKongKeyForPlayer($playerId) !== null;
+    }
+
+    /** Ключ плитки для закрытого конга после добора, иначе null. */
+    public function concealedKongKeyForPlayer(int $playerId): ?string
+    {
+        if ($this->phase !== self::PHASE_DISCARD || $this->currentPlayer !== $playerId) {
+            return null;
+        }
+        $pl = $this->players[$playerId] ?? null;
+        if ($pl === null) {
+            return null;
+        }
+
+        // Человек: предложение только если добранная плитка замыкает четвёрку
+        if ($this->pendingDrawnId !== null) {
+            $drawn = null;
+            foreach ($pl->hand as $t) {
+                if ($t->id === $this->pendingDrawnId) {
+                    $drawn = $t;
+                    break;
+                }
+            }
+            if ($drawn === null) {
+                return null;
+            }
+            $key = $drawn->key();
+            $count = 0;
+            foreach ($pl->hand as $t) {
+                if ($t->key() === $key) {
+                    $count++;
+                }
+            }
+            return $count >= 4 ? $key : null;
+        }
+
+        // Бот: pendingDrawn не храним — ищем любую четвёрку в руке
+        if (!$pl->isHuman) {
+            $counts = [];
+            foreach ($pl->hand as $t) {
+                $counts[$t->key()] = ($counts[$t->key()] ?? 0) + 1;
+            }
+            foreach ($counts as $key => $c) {
+                if ($c >= 4) {
+                    return $key;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Объявить закрытый конг (安槓) с руки после добора четвёртой плитки.
+     * @return array{ok: bool, error?: string}
+     */
+    public function declareConcealedKong(int $playerId, ?string $key = null): array
+    {
+        if ($this->phase !== self::PHASE_DISCARD || $this->currentPlayer !== $playerId) {
+            return ['ok' => false, 'error' => 'Сейчас нельзя объявить конг'];
+        }
+        $offerKey = $this->concealedKongKeyForPlayer($playerId);
+        if ($offerKey === null) {
+            return ['ok' => false, 'error' => 'Нет закрытого конга'];
+        }
+        if ($key !== null && $key !== $offerKey) {
+            return ['ok' => false, 'error' => 'Неверная плитка для конга'];
+        }
+        $key = $offerKey;
+        $pl = $this->players[$playerId];
+        $tiles = $pl->removeByKey($key, 4);
+        if (count($tiles) < 4) {
+            // вернуть на всякий случай
+            foreach ($tiles as $t) {
+                $pl->hand[] = $t;
+            }
+            $pl->sortHand();
+            return ['ok' => false, 'error' => 'Не хватает плиток для конга'];
+        }
+        $pl->melds[] = new Meld(Meld::KONG, $tiles, true, null);
+        $this->pendingDrawnId = null;
+        $this->addLog($pl->name . ' объявляет закрытый Конг ' . $tiles[0]->display());
+        // Добор замещающей плитки из стены
+        $this->phase = self::PHASE_DRAW;
+        $this->drawForCurrent();
+        return ['ok' => true];
+    }
+
     public function discard(int $playerId, int $tileId): array
     {
         if ($this->phase !== self::PHASE_DISCARD || $playerId !== $this->currentPlayer) {
@@ -649,6 +743,15 @@ class Game
 
         if ($this->phase === self::PHASE_DISCARD) {
             $p = $this->players[$this->currentPlayer];
+            // Бот: закрытый конг после добора 4-й одинаковой
+            if ($this->canOfferConcealedKong($this->currentPlayer)) {
+                $this->declareConcealedKong($this->currentPlayer);
+                if ($this->phase === self::PHASE_ENDED) {
+                    return;
+                }
+                // После добора замещения — следующий botStep (победа / ещё конг / сброс)
+                return;
+            }
             if ($this->mayWin($p, true) && $this->ai->wantsWin($p, true, $p->seatWind, $this->roundWind)) {
                 $this->declareWin($this->currentPlayer, true);
                 return;
@@ -788,6 +891,8 @@ class Game
             'claimOptions' => $humanOpts,
             'claimQueue' => $this->claimQueue,
             'canWin' => $canWin,
+            'canConcealedKong' => $this->canOfferConcealedKong(0),
+            'concealedKongKey' => $this->concealedKongKeyForPlayer(0),
             'pendingDrawnId' => ($this->currentPlayer === 0 && $this->phase === self::PHASE_DISCARD)
                 ? $this->pendingDrawnId
                 : null,
