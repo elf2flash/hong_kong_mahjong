@@ -569,7 +569,9 @@
         b.addEventListener('click', () => doClaim(claim, extra.chowOption));
         claimPanel.appendChild(b);
       };
-      if (opts.win) addBtn('胡 Махджонг', 'win');
+      if (opts.win) {
+        addBtn(opts.robKong ? '搶槓 Ограбить конг' : '胡 Махджонг', 'win');
+      }
       if (opts.kong) addBtn('槓 Конг', 'kong');
       if (opts.pung) addBtn('碰 Понг', 'pung');
       if (opts.chow && opts.chowOptions) {
@@ -588,21 +590,33 @@
     } else if (
       state.phase === 'discard' &&
       state.currentPlayer === 0 &&
-      state.canConcealedKong &&
-      state.pendingDrawnId != null
+      state.pendingDrawnId != null &&
+      (state.canConcealedKong || state.canAddedKong)
     ) {
       claimPanel.classList.remove('hidden');
       const tip = document.createElement('p');
       tip.className = 'concealed-kong-tip';
-      tip.textContent = 'Добор замыкает четвёрку — закрытый конг?';
+      tip.textContent = state.canAddedKong
+        ? 'Добор к открытому понгу — добавленный конг (Кан)?'
+        : 'Добор замыкает четвёрку — закрытый конг?';
       claimPanel.appendChild(tip);
 
-      const kongBtn = document.createElement('button');
-      kongBtn.type = 'button';
-      kongBtn.className = 'btn btn-claim';
-      kongBtn.textContent = '槓 Объявить закрытый конг';
-      kongBtn.addEventListener('click', () => doConcealedKong());
-      claimPanel.appendChild(kongBtn);
+      if (state.canAddedKong) {
+        const addedBtn = document.createElement('button');
+        addedBtn.type = 'button';
+        addedBtn.className = 'btn btn-claim';
+        addedBtn.textContent = '槓 Кан — добавленный конг';
+        addedBtn.addEventListener('click', () => doAddedKong());
+        claimPanel.appendChild(addedBtn);
+      }
+      if (state.canConcealedKong) {
+        const kongBtn = document.createElement('button');
+        kongBtn.type = 'button';
+        kongBtn.className = 'btn btn-claim';
+        kongBtn.textContent = '槓 Объявить закрытый конг';
+        kongBtn.addEventListener('click', () => doConcealedKong());
+        claimPanel.appendChild(kongBtn);
+      }
 
       const keepBtn = document.createElement('button');
       keepBtn.type = 'button';
@@ -712,6 +726,20 @@
       const data = await api('concealedKong');
       if (!data.ok) {
         alert(data.error || 'Нельзя объявить конг');
+      }
+      await applyState(data);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function doAddedKong() {
+    if (isInputLocked() || !state?.canAddedKong) return;
+    busy = true;
+    try {
+      const data = await api('addedKong');
+      if (!data.ok) {
+        alert(data.error || 'Нельзя объявить добавленный конг');
       }
       await applyState(data);
     } finally {

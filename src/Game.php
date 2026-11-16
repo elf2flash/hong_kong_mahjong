@@ -41,6 +41,11 @@ class Game
     /** ID только что взятой плитки (показывается отдельно справа, пока не «вставлена») */
     public ?int $pendingDrawnId = null;
     /**
+     * Добавленный конг ждёт ограбления (搶槓):
+     * ['playerId'=>int,'meldIndex'=>int,'tile'=>Tile]|null
+     */
+    public ?array $pendingAddedKong = null;
+    /**
      * false — победа без ограничения по фанам (как раньше);
      * true — нужно минимум Scorer::MIN_FAN фанов.
      */
@@ -132,6 +137,7 @@ class Game
         $this->log = [];
         $this->phase = self::PHASE_DRAW;
         $this->pendingDrawnId = null;
+        $this->pendingAddedKong = null;
 
         // Раздача: по 13, дилер +1
         for ($r = 0; $r < 13; $r++) {
@@ -335,6 +341,219 @@ class Game
         return ['ok' => true];
     }
 
+    /** Можно ли предложить добавленный конг (открытый понг + 4-я плитка). */
+    public function canOfferAddedKong(int $playerId = 0): bool
+    {
+        return $this->addedKongKeyForPlayer($playerId) !== null;
+    }
+
+    /** Ключ плитки для добавленного конга, иначе null. */
+    public function addedKongKeyForPlayer(int $playerId): ?string
+    {
+        if ($this->phase !== self::PHASE_DISCARD || $this->currentPlayer !== $playerId) {
+            return null;
+        }
+        if ($this->pendingAddedKong !== null) {
+            return null;
+        }
+        $pl = $this->players[$playerId] ?? null;
+        if ($pl === null) {
+            return null;
+        }
+
+        // Человек: только если добранная замыкает открытый понг
+        if ($this->pendingDrawnId !== null) {
+            $drawn = null;
+            foreach ($pl->hand as $t) {
+                if ($t->id === $this->pendingDrawnId) {
+                    $drawn = $t;
+                    break;
+                }
+            }
+            if ($drawn === null) {
+                return null;
+            }
+            return $this->findOpenPungIndex($pl, $drawn->key()) !== null ? $drawn->key() : null;
+        }
+
+        // Бот: любая плитка в руке, совпадающая с открытым понгом
+        if (!$pl->isHuman) {
+            foreach ($pl->hand as $t) {
+                if ($this->findOpenPungIndex($pl, $t->key()) !== null) {
+                    return $t->key();
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** Индекс открытого понга с данным ключом. */
+    private function findOpenPungIndex(Player $pl, string $key): ?int
+    {
+        foreach ($pl->melds as $i => $m) {
+            if ($m->type === Meld::PUNG && !$m->concealed && $m->tiles[0]->key() === $key) {
+                return (int)$i;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Объявить добавленный конг (加槓): 4-я плитка к открытому понгу.
+     * Соперники могут ограбить (搶槓); иначе — добор замещения.
+     * @return array{ok: bool, error?: string}
+     */
+    public function declareAddedKong(int $playerId, ?string $key = null): array
+    {
+        if ($this->phase !== self::PHASE_DISCARD || $this->currentPlayer !== $playerId) {
+            return ['ok' => false, 'error' => 'Сейчас нельзя объявить конг'];
+        }
+        $offerKey = $this->addedKongKeyForPlayer($playerId);
+        if ($offerKey === null) {
+            return ['ok' => false, 'error' => 'Нет добавленного конга'];
+        }
+        if ($key !== null && $key !== $offerKey) {
+            return ['ok' => false, 'error' => 'Неверная плитка для конга'];
+        }
+        $key = $offerKey;
+        $pl = $this->players[$playerId];
+        $meldIndex = $this->findOpenPungIndex($pl, $key);
+        if ($meldIndex === null) {
+            return ['ok' => false, 'error' => 'Нет открытого понга'];
+        }
+
+        // Снять плитку из руки (предпочтительно добранную)
+        $tile = null;
+        if ($this->pendingDrawnId !== null) {
+            foreach ($pl->hand as $t) {
+                if ($t->id === $this->pendingDrawnId && $t->key() === $key) {
+                    $tile = $pl->removeTileById($t->id);
+                    break;
+                }
+            }
+        }
+        if ($tile === null) {
+            $got = $pl->removeByKey($key, 1);
+            $tile = $got[0] ?? null;
+        }
+        if ($tile === null) {
+            return ['ok' => false, 'error' => 'Нет плитки для конга'];
+        }
+
+        $this->pendingDrawnId = null;
+        $this->pendingAddedKong = [
+            'playerId' => $playerId,
+            'meldIndex' => $meldIndex,
+            'tile' => $tile,
+        ];
+        // Для проверки 搶槓 и оплаты — как сброс от объявившего конг
+        $this->lastDiscard = $tile;
+        $this->lastDiscardPlayer = $playerId;
+        $this->addLog($pl->name . ' объявляет добавленный Конг ' . $tile->display());
+
+        $this->buildRobKongClaimQueue($playerId, $tile);
+        if ($this->claimQueue) {
+            $this->phase = self::PHASE_CLAIM;
+            return ['ok' => true, 'claims' => true];
+        }
+
+        $this->completeAddedKong();
+        return ['ok' => true, 'claims' => false];
+    }
+
+    /** Очередь только на победу (ограбление конга). */
+    private function buildRobKongClaimQueue(int $konger, Tile $tile): void
+    {
+        $this->claimQueue = [];
+        $this->claimOptions = [];
+        $wins = [];
+
+        for ($i = 1; $i <= 3; $i++) {
+            $pid = ($konger + $i) % 4;
+            $pl = $this->players[$pid];
+            if (!$this->mayWinOnDiscard($pl, $tile)) {
+                continue;
+            }
+
+            $opts = [
+                'win' => true,
+                'kong' => false,
+                'pung' => false,
+                'chow' => false,
+                'chowOptions' => [],
+                'robKong' => true,
+            ];
+
+            if ($pl->isHuman) {
+                $this->claimOptions[$pid] = $opts;
+                $wins[] = $pid;
+            } else {
+                $decision = $this->ai->chooseClaim(
+                    $pl,
+                    $tile,
+                    $opts,
+                    $pl->seatWind,
+                    $this->roundWind,
+                    $this->requireMinFan
+                );
+                if ($decision['action'] === 'win') {
+                    $this->claimOptions[$pid] = $opts;
+                    $this->claimOptions[$pid]['aiAction'] = $decision;
+                    $wins[] = $pid;
+                }
+            }
+        }
+
+        $this->claimQueue = array_values(array_unique($wins));
+    }
+
+    /** Завершить добавленный конг после того, как никто не ограбил. */
+    private function completeAddedKong(): void
+    {
+        if ($this->pendingAddedKong === null) {
+            return;
+        }
+        $info = $this->pendingAddedKong;
+        $playerId = (int)$info['playerId'];
+        $meldIndex = (int)$info['meldIndex'];
+        /** @var Tile $tile */
+        $tile = $info['tile'];
+        $pl = $this->players[$playerId];
+        $meld = $pl->melds[$meldIndex] ?? null;
+        if ($meld === null || $meld->type !== Meld::PUNG) {
+            $this->pendingAddedKong = null;
+            $this->clearClaims();
+            $this->lastDiscard = null;
+            $this->lastDiscardPlayer = null;
+            return;
+        }
+
+        $pl->melds[$meldIndex] = new Meld(
+            Meld::KONG,
+            [...$meld->tiles, $tile],
+            false,
+            $meld->fromPlayer
+        );
+        $this->pendingAddedKong = null;
+        $this->clearClaims();
+        $this->lastDiscard = null;
+        $this->lastDiscardPlayer = null;
+        $this->currentPlayer = $playerId;
+        $this->phase = self::PHASE_DRAW;
+        $this->drawForCurrent();
+    }
+
+    /** После исчерпания очереди клеймов: добить добавленный конг или следующий ход. */
+    private function afterClaimsResolved(): void
+    {
+        if ($this->pendingAddedKong !== null) {
+            $this->completeAddedKong();
+            return;
+        }
+        $this->advanceTurn();
+    }
+
     public function discard(int $playerId, int $tileId): array
     {
         if ($this->phase !== self::PHASE_DISCARD || $playerId !== $this->currentPlayer) {
@@ -447,7 +666,7 @@ class Game
         }
 
         if ($this->phase === self::PHASE_CLAIM && !$this->claimQueue) {
-            $this->advanceTurn();
+            $this->afterClaimsResolved();
         }
     }
 
@@ -459,7 +678,7 @@ class Game
             return;
         }
         if (!$this->claimQueue) {
-            $this->advanceTurn();
+            $this->afterClaimsResolved();
             return;
         }
 
@@ -477,7 +696,7 @@ class Game
             array_shift($this->claimQueue);
             unset($this->claimOptions[$pid]);
             if ($this->phase === self::PHASE_CLAIM && !$this->claimQueue) {
-                $this->advanceTurn();
+                $this->afterClaimsResolved();
             }
             return;
         }
@@ -494,6 +713,12 @@ class Game
                     'kong' => 'Конг!',
                     default => '',
                 },
+            ];
+        }
+        if (!empty($res['ok']) && $action === 'win' && !empty($res['robKong'])) {
+            $this->announce = [
+                'playerId' => $pid,
+                'text' => '搶槓!',
             ];
         }
     }
@@ -513,7 +738,7 @@ class Game
                 unset($this->claimOptions[0]);
                 $this->announce = null;
                 if ($this->phase === self::PHASE_CLAIM && !$this->claimQueue) {
-                    $this->advanceTurn();
+                    $this->afterClaimsResolved();
                 }
                 return ['ok' => true];
             }
@@ -528,7 +753,7 @@ class Game
             unset($this->claimOptions[0]);
             $this->announce = null;
             if ($this->phase === self::PHASE_CLAIM && !$this->claimQueue) {
-                $this->advanceTurn();
+                $this->afterClaimsResolved();
             }
             return ['ok' => true];
         }
@@ -544,16 +769,32 @@ class Game
 
         $discard = $this->lastDiscard;
         $pl = $this->players[$playerId];
-        $opts = $this->claimOptions[$playerId] ?? $this->checker->claimOptions(
-            $pl->hand,
-            $pl->melds,
-            $discard,
-            (($this->lastDiscardPlayer + 1) % 4) === $playerId
+        $isRobKong = $this->pendingAddedKong !== null;
+        $opts = $this->claimOptions[$playerId] ?? (
+            $isRobKong
+                ? [
+                    'win' => $this->mayWinOnDiscard($pl, $discard),
+                    'kong' => false,
+                    'pung' => false,
+                    'chow' => false,
+                    'chowOptions' => [],
+                    'robKong' => true,
+                ]
+                : $this->checker->claimOptions(
+                    $pl->hand,
+                    $pl->melds,
+                    $discard,
+                    (($this->lastDiscardPlayer + 1) % 4) === $playerId
+                )
         );
 
         if ($action === 'pass') {
             $this->claimQueue = array_values(array_filter($this->claimQueue, fn($id) => $id !== $playerId));
             return ['ok' => true];
+        }
+
+        if ($isRobKong && $action !== 'win') {
+            return ['ok' => false, 'error' => 'Можно только ограбить конг или пас'];
         }
 
         if ($action === 'win') {
@@ -570,10 +811,15 @@ class Game
                         : 'Нельзя выиграть',
                 ];
             }
-            // убрать из дискардов предыдущего
-            $this->takeLastDiscardFromRiver();
+            if ($isRobKong) {
+                // Плитка ещё не в реке и не в конге — понг объявившего остаётся
+                $this->pendingAddedKong = null;
+                $this->addLog($pl->name . ' ограбил конг (搶槓)');
+            } else {
+                $this->takeLastDiscardFromRiver();
+            }
             $this->declareWin($playerId, false);
-            return ['ok' => true, 'win' => true];
+            return ['ok' => true, 'win' => true, 'robKong' => $isRobKong];
         }
 
         if ($action === 'pung' && !empty($opts['pung'])) {
@@ -752,6 +998,14 @@ class Game
                 // После добора замещения — следующий botStep (победа / ещё конг / сброс)
                 return;
             }
+            // Бот: добавленный конг (понг → конг); возможна фаза 搶槓
+            if ($this->canOfferAddedKong($this->currentPlayer)) {
+                $this->declareAddedKong($this->currentPlayer);
+                if ($this->phase === self::PHASE_ENDED) {
+                    return;
+                }
+                return;
+            }
             if ($this->mayWin($p, true) && $this->ai->wantsWin($p, true, $p->seatWind, $this->roundWind)) {
                 $this->declareWin($this->currentPlayer, true);
                 return;
@@ -893,6 +1147,8 @@ class Game
             'canWin' => $canWin,
             'canConcealedKong' => $this->canOfferConcealedKong(0),
             'concealedKongKey' => $this->concealedKongKeyForPlayer(0),
+            'canAddedKong' => $this->canOfferAddedKong(0),
+            'addedKongKey' => $this->addedKongKeyForPlayer(0),
             'pendingDrawnId' => ($this->currentPlayer === 0 && $this->phase === self::PHASE_DISCARD)
                 ? $this->pendingDrawnId
                 : null,
@@ -927,6 +1183,11 @@ class Game
             'result' => $this->result,
             'wallDead' => $this->wallDead,
             'pendingDrawnId' => $this->pendingDrawnId,
+            'pendingAddedKong' => $this->pendingAddedKong === null ? null : [
+                'playerId' => (int)$this->pendingAddedKong['playerId'],
+                'meldIndex' => (int)$this->pendingAddedKong['meldIndex'],
+                'tile' => $this->pendingAddedKong['tile']->jsonSerialize(),
+            ],
             'requireMinFan' => $this->requireMinFan,
         ];
     }
@@ -950,6 +1211,16 @@ class Game
         $g->result = $data['result'] ?? null;
         $g->wallDead = (int)($data['wallDead'] ?? 14);
         $g->pendingDrawnId = isset($data['pendingDrawnId']) ? ($data['pendingDrawnId'] !== null ? (int)$data['pendingDrawnId'] : null) : null;
+        if (!empty($data['pendingAddedKong']) && is_array($data['pendingAddedKong'])) {
+            $pak = $data['pendingAddedKong'];
+            $g->pendingAddedKong = [
+                'playerId' => (int)$pak['playerId'],
+                'meldIndex' => (int)$pak['meldIndex'],
+                'tile' => Tile::fromArray($pak['tile']),
+            ];
+        } else {
+            $g->pendingAddedKong = null;
+        }
         $g->requireMinFan = (bool)($data['requireMinFan'] ?? false);
         return $g;
     }
