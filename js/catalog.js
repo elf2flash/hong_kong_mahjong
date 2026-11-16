@@ -40,13 +40,21 @@
     dragon: (v) => ({ 1: '中 Red · C', 2: '發 Green · F', 3: '白 White · P' }[v]),
   };
 
-  document.querySelectorAll('.tile-row').forEach((row) => {
-    const suit = row.dataset.suit;
-    const from = Number(row.dataset.from);
-    const to = Number(row.dataset.to);
-    for (let v = from; v <= to; v++) {
-      const tile = makeTile(suit, v);
-      row.appendChild(tileCard(tile, names[suit](v)));
-    }
-  });
+  function renderCatalog() {
+    id = 0;
+    document.querySelectorAll('.tile-row').forEach((row) => {
+      row.innerHTML = '';
+      const suit = row.dataset.suit;
+      const from = Number(row.dataset.from);
+      const to = Number(row.dataset.to);
+      for (let v = from; v <= to; v++) {
+        const tile = makeTile(suit, v);
+        row.appendChild(tileCard(tile, names[suit](v)));
+      }
+    });
+  }
+
+  renderCatalog();
+
+  window.MahjongCatalog = { refresh: renderCatalog };
 })();

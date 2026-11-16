@@ -79,6 +79,21 @@ $navCurrent = $navCurrent ?? 'game';
             <p class="tile-size-hint">Шаг 0.1 с · от 0 до 3 с</p>
           </div>
         </li>
+        <li role="none" class="nav-setting">
+          <div class="tile-size-control" data-setting="tile-style">
+            <span class="tile-size-label">Тип плиток</span>
+            <div class="tile-style-row">
+              <button type="button" class="nav-mode" role="menuitem" data-tile-style="a">
+                <span class="nav-mode-check" aria-hidden="true">✓</span>
+                Вариант A
+              </button>
+              <button type="button" class="nav-mode" role="menuitem" data-tile-style="b">
+                <span class="nav-mode-check" aria-hidden="true">✓</span>
+                Вариант B
+              </button>
+            </div>
+          </div>
+        </li>
       </ul>
     </li>
   </ul>

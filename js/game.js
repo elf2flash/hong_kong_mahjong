@@ -804,6 +804,9 @@
           : 'Без ограничения по фанам · Чоу / Понг / Конг / Махджонг';
       }
     },
+    onTileStyleChanged() {
+      if (state) render();
+    },
   };
 
   load().catch((e) => {

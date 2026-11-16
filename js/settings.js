@@ -2,6 +2,7 @@
   const SCALE_KEY = 'hk-mahjong-tile-scale';
   const BOT_DELAY_KEY = 'hk-mahjong-bot-delay';
   const WIN_MODE_KEY = 'hk-mahjong-win-mode';
+  const TILE_STYLE_KEY = 'hk-mahjong-tile-style';
 
   const SCALE_STEP = 0.1;
   const SCALE_MIN = 0.5;
@@ -50,10 +51,38 @@
   let scale = loadScale();
   let botDelay = loadDelay();
   let winMode = loadWinMode();
+  let tileStyle = loadTileStyle();
 
   function loadWinMode() {
     const raw = localStorage.getItem(WIN_MODE_KEY);
     return raw === 'min3' ? 'min3' : 'any';
+  }
+
+  function loadTileStyle() {
+    const raw = localStorage.getItem(TILE_STYLE_KEY);
+    return raw === 'b' ? 'b' : 'a';
+  }
+
+  function syncTileStyleUI(style) {
+    tileStyle = style === 'b' ? 'b' : 'a';
+    document.querySelectorAll('[data-tile-style]').forEach((btn) => {
+      btn.classList.toggle('is-selected', btn.getAttribute('data-tile-style') === tileStyle);
+    });
+  }
+
+  function setTileStyle(style) {
+    const next = style === 'b' ? 'b' : 'a';
+    syncTileStyleUI(next);
+    persist(TILE_STYLE_KEY, next);
+    if (window.MahjongTiles?.setStyle) {
+      window.MahjongTiles.setStyle(next);
+    }
+    if (window.MahjongGame?.onTileStyleChanged) {
+      window.MahjongGame.onTileStyleChanged(next);
+    }
+    if (window.MahjongCatalog?.refresh) {
+      window.MahjongCatalog.refresh();
+    }
   }
 
   function persist(key, value) {
@@ -129,7 +158,10 @@
   }
 
   function onSettingsClick(e) {
-    const tileBtn = e.target.closest('[data-tile-size]');
+    const el = e.target instanceof Element ? e.target : e.target?.parentElement;
+    if (!el || typeof el.closest !== 'function') return;
+
+    const tileBtn = el.closest('[data-tile-size]');
     if (tileBtn && !tileBtn.disabled) {
       e.preventDefault();
       e.stopPropagation();
@@ -139,7 +171,7 @@
       return;
     }
 
-    const delayBtn = e.target.closest('[data-bot-delay]');
+    const delayBtn = el.closest('[data-bot-delay]');
     if (delayBtn && !delayBtn.disabled) {
       e.preventDefault();
       e.stopPropagation();
@@ -149,17 +181,29 @@
       return;
     }
 
-    const modeBtn = e.target.closest('[data-win-mode]');
+    const modeBtn = el.closest('[data-win-mode]');
     if (modeBtn) {
       e.preventDefault();
       e.stopPropagation();
       setWinMode(modeBtn.getAttribute('data-win-mode'));
+      return;
+    }
+
+    const styleBtn = el.closest('button[data-tile-style]');
+    if (styleBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      setTileStyle(styleBtn.getAttribute('data-tile-style'));
     }
   }
 
   applyScale(scale);
   applyDelay(botDelay);
   syncWinModeUI(winMode);
+  syncTileStyleUI(tileStyle);
+  if (window.MahjongTiles?.setStyle) {
+    window.MahjongTiles.setStyle(tileStyle);
+  }
   // При загрузке только синхронизируем сервер, без перезапуска UI-партии
   setWinMode(winMode, { syncOnly: true });
 
@@ -170,6 +214,7 @@
     getBotDelaySec: () => botDelay,
     getBotDelayMs: () => Math.round(botDelay * 1000),
     getWinMode: () => winMode,
+    getTileStyle: () => tileStyle,
     syncWinModeUI,
   };
 })();
